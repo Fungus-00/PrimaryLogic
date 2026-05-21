@@ -1,0 +1,2546 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.github/
+  workflows/
+    create-release.yml
+    lean_action_ci.yml
+    update.yml
+PrimaryLogic/
+  FirstOrder/
+    Axiom.lean
+    Completeness.lean
+    Eq.lean
+    MaximalConsistent.lean
+    Soundness.lean
+    TermModel.lean
+    Theorem.lean
+  Encoding.lean
+  Formula.lean
+  Hom.lean
+  Model.lean
+  Proof.lean
+  Tool.lean
+  Vars.lean
+.gitignore
+lake-manifest.json
+lakefile.toml
+lean-toolchain
+PrimaryLogic.lean
+README.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".github/workflows/create-release.yml">
+name: Create Release
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'master'
+    paths:
+      - 'lean-toolchain'
+
+jobs:
+  lean-release-tag:
+    name: Add Lean release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: lean-release-tag action
+      uses: leanprover-community/lean-release-tag@v1
+      with:
+        do-release: true
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+</file>
+
+<file path=".github/workflows/lean_action_ci.yml">
+name: Lean Action CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read # Read access to repository contents
+  pages: write # Write access to GitHub Pages
+  id-token: write # Write access to ID tokens
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: leanprover/lean-action@v1
+      - uses: leanprover-community/docgen-action@v1
+</file>
+
+<file path=".github/workflows/update.yml">
+name: Update Dependencies
+
+on:
+  # schedule:             # Sets a schedule to trigger the workflow
+  #   - cron: "0 8 * * *" # Every day at 08:00 AM UTC (see https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule)
+  workflow_dispatch:    # Allows the workflow to be triggered manually via the GitHub interface
+
+jobs:
+  check-for-updates: # Determines which updates to apply.
+    runs-on: ubuntu-latest
+    outputs:
+      is-update-available: ${{ steps.check-for-updates.outputs.is-update-available }}
+      new-tags: ${{ steps.check-for-updates.outputs.new-tags }}
+    steps:
+      - name: Run the action
+        id: check-for-updates
+        uses: leanprover-community/mathlib-update-action@v1
+        # START CONFIGURATION BLOCK 1
+        # END CONFIGURATION BLOCK 1
+  do-update: # Runs the upgrade, tests it, and makes a PR/issue/commit.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # Grants permission to push changes to the repository
+      issues: write        # Grants permission to create or update issues
+      pull-requests: write # Grants permission to create or update pull requests
+    needs: check-for-updates
+    if: ${{ needs.check-for-updates.outputs.is-update-available == 'true' }}
+    strategy: # Runs for each update discovered by the `check-for-updates` job.
+      max-parallel: 1 # Ensures that the PRs/issues are created in order.
+      matrix:
+        tag: ${{ fromJSON(needs.check-for-updates.outputs.new-tags) }}
+    steps:
+      - name: Run the action
+        id: update-the-repo
+        uses: leanprover-community/mathlib-update-action/do-update@v1
+        with:
+          tag: ${{ matrix.tag }}
+          # START CONFIGURATION BLOCK 2
+          on_update_succeeds: pr # Create a pull request if the update succeeds
+          on_update_fails: issue # Create an issue if the update fails
+          # END CONFIGURATION BLOCK 2
+</file>
+
+<file path="PrimaryLogic/FirstOrder/Axiom.lean">
+import PrimaryLogic.Proof
+import PrimaryLogic.Vars
+
+namespace PrimaryLogic
+variable {LF LP : Type}
+
+/--
+- `h1`: Positive Implication
+- `h2`: Distribution of Implication
+- `h3`: Elimination of Double Negation
+- `q1`: Universal Distribution
+- `q2`: Universal Instantiation
+- `q3`: Universal Introduction
+- `gen`: Universal Generalization
+-/
+inductive FOLAxioms (L : Lang LF LP) : Type
+  | h1 : Formula L -> Formula L -> FOLAxioms L
+  | h2 : Formula L -> Formula L -> Formula L -> FOLAxioms L
+  | h3 : Formula L -> FOLAxioms L
+  | q1 : Idx -> Formula L -> Formula L -> FOLAxioms L
+  | q2 (i : Idx) (t : Term L) (φ : Formula L) : φ.FreeFor i t -> FOLAxioms L
+  | q3 (i : Idx) (φ : Formula L) : i ∉ φ.fVars -> FOLAxioms L
+  | gen : Idx -> FOLAxioms L -> FOLAxioms L
+
+def FOLAxioms.toFormula (L : Lang LF LP) : FOLAxioms L -> Formula L
+  | .h1 φ ψ => .impl φ (.impl ψ φ)
+  | .h2 φ ψ χ => .impl (.impl φ (.impl ψ χ)) (.impl (.impl φ ψ) (.impl φ χ))
+  | .h3 φ => .impl (.impl (.impl φ .falsum) .falsum) φ
+  | .q1 i φ ψ => .impl (.fall i (.impl φ ψ)) (.impl (.fall i φ) (.fall i ψ))
+  | .q2 i t φ h => .impl (.fall i φ) (φ.safeSub i t h)
+  | .q3 i φ _ => .impl φ (.fall i φ)
+  | .gen i a => .fall i (toFormula L a)
+
+variable {L : Lang LF LP}
+
+instance : AxiomSchema L (FOLAxioms L) := ⟨FOLAxioms.toFormula L⟩
+
+def Formula.not (φ : Formula L) : Formula L := φ.impl .falsum
+def Formula.or (φ ψ : Formula L) : Formula L := φ.not.impl ψ
+def Formula.and (φ ψ : Formula L) : Formula L := (φ.impl ψ.not).not
+def Formula.iff (φ ψ : Formula L) : Formula L := (φ.impl ψ).and (ψ.impl φ)
+def Formula.ex (i : Idx) (φ : Formula L) : Formula L := (Formula.fall i φ.not).not
+
+notation "⊥" => Formula.falsum
+infixr:25 " ↔ " => Formula.iff
+infixr:30 " → " => Formula.impl
+infixl:45 " ∧ " => Formula.and
+infixl:40 " ∨ " => Formula.or
+prefix:50 "¬" => Formula.not
+-- Making `#` instead of `,` as the placeholder behind quantifier and index is to distinguish from
+-- their usage in `Prop` type context.
+macro "∀" i:ident "# " φ:term : term => `(Formula.fall $i $φ)
+macro "∃" i:ident "# " φ:term : term => `(Formula.ex $i $φ)
+abbrev FOLProof := Proof (L := L) (FOLAxioms L)
+infix:20 " ⊢ " => FOLProof
+
+variable {c : LF} {s : Finset Idx} (m : Formula.axiomMor L c s)
+
+def FOLAxioms.transform (a : FOLAxioms L) : a.toFormula.vars ⊆ s → FOLAxioms L :=
+  fun h' => open Formula in match a with
+  | .h1 φ ψ => .h1 (m.f φ) (m.f ψ)
+  | .h2 φ ψ χ => .h2 (m.f φ) (m.f ψ) (m.f χ)
+  | .h3 φ => .h3 (m.f φ)
+  | .q1 i φ ψ => .q1 i (m.f φ) (m.f ψ)
+  | .q2 i t φ h =>
+    have h1 : i ∈ s ∧ φ.vars ⊆ s := by
+      simp only [toFormula, vars, Finset.union_subset_iff, Finset.insert_subset_iff] at h'
+      exact h'.left
+    .q2 i (m.τ t) (m.f φ) <| m.free_for h h1.left <|
+      subset_trans (bVars_subset_vars φ) h1.right
+  | .q3 i φ h =>
+    have h1 : i ∈ s ∧ φ.vars ⊆ s := by
+      simp only [toFormula, vars, Finset.union_subset_iff, Finset.insert_subset_iff] at h'
+      exact h'.right
+    .q3 i (m.f φ) (m.free_var h h1.left h1.right)
+  | .gen i a => .gen i <| transform a (by
+    simp only [toFormula, vars, Finset.insert_subset_iff] at h'; exact h'.right)
+
+theorem FOLAxioms.transform_eq (a : FOLAxioms L) (h' : a.toFormula.vars ⊆ s) :
+    (transform m a h').toFormula = m.f a.toFormula := by
+  unfold toFormula transform
+  open Formula in
+  cases a with
+  | h1 φ ψ => dsimp; repeat rw [m.map_impl]
+  | h2 φ ψ χ => dsimp; repeat rw [m.map_impl]
+  | h3 φ => simp only [m.map_impl, m.map_falsum]
+  | q1 i φ ψ => simp only [m.map_impl, m.map_fall]
+  | q2 i t φ h =>
+    simp only [m.map_impl, m.map_fall, impl.injEq, true_and];
+    simp only [toFormula, vars, Finset.union_subset_iff, Finset.insert_subset_iff] at h'
+    symm; apply m.subst_comm
+    · exact h'.left.left
+    · trans φ.vars
+      · exact bVars_subset_vars φ
+      · exact h'.left.right
+  | q3 i φ h => dsimp; rw [m.map_impl, m.map_fall]
+  | gen i a =>
+    dsimp; rw [m.map_fall, fall.injEq]
+    simp only [toFormula, vars, Finset.insert_subset_iff] at h'
+    exact ⟨rfl, transform_eq a h'.right⟩
+
+instance : AxiomTransform (FOLAxioms L) m where
+  transform := FOLAxioms.transform m
+  invariance := FOLAxioms.transform_eq m
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/FirstOrder/Completeness.lean">
+import PrimaryLogic.Model
+import PrimaryLogic.FirstOrder.Theorem
+
+namespace PrimaryLogic
+variable {LF LP : Type} {L : Lang LF LP}
+
+lemma complete_iff_satisfiable :
+    (∀ Γ : Set (Formula L), Consistent (FOLAxioms L) Γ -> Satisfiable Γ) <->
+    (∀ Γ : Set (Formula L), ∀ φ : Formula L, (Γ ⊨ φ) -> (Γ ⊢ φ)) := by
+  unfold Consistent Satisfiable SemanticConsequence Structure.satisfies
+  constructor
+  · intro h1 Γ φ h2
+    rw [Proof.raa]
+    by_contra
+    have ⟨α, c, M, s, h3⟩ := h1 (Γ.insert (¬φ)) this
+    simp only [Set.insert, Set.mem_setOf_eq, forall_eq_or_imp] at h3
+    apply h3.left
+    exact h2 α M s h3.right
+  · intro h1 Γ h2
+    by_contra
+    apply h2
+    apply h1 Γ .falsum
+    simp only [not_exists] at this
+    intro α c M s h3
+    have := this α c M s
+    contradiction
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/FirstOrder/Eq.lean">
+import PrimaryLogic.FirstOrder.Axiom
+
+namespace PrimaryLogic
+variable {LF LP : Type} (L : Lang LF LP)
+
+class HasEq (L : Lang LF LP) : Type where
+  eq_i : LP
+  pred_is_eq : L.preds eq_i = 2
+  eq_args (t s : Term L) : Fin 2 → Term L :=
+    fun | ⟨0, _⟩ => t | ⟨1, _⟩ => s
+  eq_pred (t s : Term L) : Formula L := .atom eq_i
+    fun k => eq_args t s <| cast (by rw [pred_is_eq]) k
+
+variable (L : Lang LF LP) [HasEq L]
+
+inductive EqAxioms : Type
+  | rfl : Term L -> EqAxioms
+  | sub (i : Idx) (t : Term L) (φ : Formula L) : φ.FreeFor i t -> EqAxioms
+
+instance : AxiomSchema L (EqAxioms L) where toFormula := fun
+  | .rfl t => HasEq.eq_pred t t
+  | .sub i t φ h => .impl (HasEq.eq_pred (.var i) t)
+    (.impl φ (φ.safeSub i t h))
+
+inductive HilbertAxioms : Type
+  | fol : FOLAxioms L -> HilbertAxioms
+  | eq : EqAxioms L -> HilbertAxioms
+
+instance : AxiomSchema L (HilbertAxioms L) where toFormula := fun
+  | .fol a | .eq a => AxiomSchema.toFormula (L := L) a
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/FirstOrder/MaximalConsistent.lean">
+import PrimaryLogic.Encoding
+import PrimaryLogic.Model
+import PrimaryLogic.FirstOrder.Theorem
+
+namespace PrimaryLogic
+variable {LF LP : Type} {L : Lang LF LP} (Γ : Set (Formula L))
+
+def MaximalConsistent : Prop := Consistent (FOLAxioms L) Γ ∧ (∀ φ, φ ∈ Γ ∨ (¬φ) ∈ Γ)
+
+theorem maxConSet_iff (Γ : Set (Formula L)) (φ : Formula L) :
+    MaximalConsistent Γ -> (φ ∈ Γ ↔ (Γ ⊢ φ)) := by
+  intro m
+  open Proof in
+  constructor
+  · intro h
+    exact asp (α := FOLAxioms L) φ h
+  · intro h
+    have h' : (¬φ) ∉ Γ := by
+      by_contra
+      have p1 := asp (α := FOLAxioms L) _ this
+      have p2 := mp (Γ := Γ) (α := FOLAxioms L) p1 h
+      exact m.left p2
+    rcases m.right φ with h1 | h2
+    · exact h1
+    · exfalso; exact h' h2
+
+private abbrev InCon : Prop := Inconsistent (FOLAxioms L) Γ
+private abbrev Con : Prop := Consistent (FOLAxioms L) Γ
+
+variable [Encodable LF] [Encodable LP]
+
+open Classical in
+def tryAdd (n : Nat) : Set (Formula L) :=
+  match Encodable.decode (α := Formula L) n with
+  | none => Γ
+  | some φ => if InCon (Γ.insert φ) then Γ.insert (¬φ) else Γ.insert φ
+
+def expand (Γ : Set (Formula L)) : Nat -> Set (Formula L)
+  | .zero => Γ
+  | .succ n => tryAdd (expand Γ n) n
+
+lemma tryAdd_con_valid (n : Nat) : Con Γ -> Con (tryAdd Γ n) := by
+  intro h
+  cases h1 : Encodable.decode (α := Formula L) n with
+  | none => simp only [tryAdd, h1]; exact h
+  | some φ =>
+    simp only [tryAdd, h1]
+    unfold Con Consistent Inconsistent at h
+    split_ifs with h2
+    · unfold Con Consistent
+      rw [←Proof.raa]
+      unfold InCon Inconsistent at h2
+      have h3 := (Proof.deduction Γ φ .falsum).mp h2
+      by_contra
+      have := Proof.mp h3 this
+      contradiction
+    · exact h2
+
+lemma expandAdd_con_valid (n : Nat) : Con Γ -> Con (expand Γ n) := by
+  intro h
+  induction n with
+  | zero => unfold expand; exact h
+  | succ n hn => unfold expand; exact tryAdd_con_valid _ n hn
+
+lemma expandAdd_monotone (m n : Nat) : m ≤ n -> expand Γ m ⊆ expand Γ n := by
+  intro hm
+  induction n with
+  | zero => rw [Nat.le_zero.mp hm]
+  | succ n h =>
+    by_cases hn : m = n + 1
+    · rw [hn]
+    · have : m ≤ n := Nat.le_of_lt_succ (Nat.lt_of_le_of_ne hm hn)
+      apply Set.Subset.trans (h this)
+      simp only [expand]
+      have tryAdd_monotone (Δ : Set (Formula L)): Δ ⊆ tryAdd Δ n := by
+        cases h' : Encodable.decode (α := Formula L) n with
+        | none => simp only [tryAdd, h', Set.Subset.refl]
+        | some φ => simp only [tryAdd, h']; split_ifs <;> exact Set.subset_insert _ Δ;
+      exact tryAdd_monotone _
+
+private abbrev maxExpand := ⋃ n : Nat, expand Γ n
+lemma maximalSet_compact (φ : Formula L) : (maxExpand Γ ⊢ φ) -> ∃ n : Nat, expand Γ n ⊢ φ := by
+  intro p
+  induction p with
+  | asp ψ hg =>
+    rw [Set.mem_iUnion] at hg
+    obtain ⟨n, h⟩ := hg
+    use n
+    exact Proof.asp ψ h
+  | axm ax => use 0; exact Proof.axm ax
+  | @mp ψ χ p q hp hq =>
+    obtain ⟨m, hm⟩ := hp
+    obtain ⟨n, hn⟩ := hq
+    use max m n
+    have := expandAdd_monotone Γ m (max m n) (Nat.le_max_left m n)
+    have h1 := Proof.monotone (FOLAxioms L) this hm
+    have := expandAdd_monotone Γ n (max m n) (Nat.le_max_right m n)
+    have h2 := Proof.monotone (FOLAxioms L) this hn
+    exact Proof.mp h1 h2
+
+theorem Lindenbaum : Con Γ -> MaximalConsistent (maxExpand Γ) := by
+  intro h
+  unfold MaximalConsistent
+  constructor
+  · by_contra
+    unfold Inconsistent at this
+    obtain ⟨n, p⟩ := maximalSet_compact Γ ⊥ this
+    have := expandAdd_con_valid Γ n h
+    contradiction
+  · intro φ
+    by_cases h1 : φ ∈ maxExpand Γ
+    · left; exact h1
+    · right
+      rw [Set.mem_iUnion, not_exists] at h1
+      let n := Encodable.encode (α := Formula L) φ
+      refine Set.mem_iUnion.mpr ⟨n.succ, ?_⟩
+      have h2 : Encodable.decode n = some φ := Encodable.encodek φ
+      simp only [expand, tryAdd, h2]
+      by_cases h4 : InCon (Set.insert φ (expand Γ n))
+      · simp only [h4]; apply Set.mem_insert
+      · have h3 := h1 n.succ
+        simp only [expand, tryAdd, h2, h4] at h3
+        have := Set.mem_insert φ (expand Γ n)
+        contradiction
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/FirstOrder/Soundness.lean">
+import PrimaryLogic.Model
+import PrimaryLogic.FirstOrder.Axiom
+
+namespace PrimaryLogic
+variable {LF LP : Type} {L : Lang LF LP} {α : Type} [Inhabited α]
+
+lemma soundness_axiom (M : Structure L α) (s : Assignment α) (ax : FOLAxioms L) :
+    ax.toFormula.interpret M s :=
+  match ax with
+  | .h1 x y => fun h _ => h
+  | .h2 x y z => fun ha hb hc => ha hc (hb hc)
+  | .h3 x => fun h => Classical.byContradiction h
+  | .q1 i x y => fun ha hb a => ha a (hb a)
+  | .q2 i t x g => fun h =>  (Formula.interpret_subst M s g).mpr (h _)
+  | .q3 i x g => fun h a => (Formula.interpret_replace_invariance M s a g).mpr h
+  | .gen i ax => (Structure.satisfies_gen_intro M ∅ (FOLAxioms.toFormula L ax) i (by simp)
+    fun s' _ => soundness_axiom M s' ax) s (by simp)
+
+/-- Classical needed, from `.q3` -/
+theorem soundness (Γ) (φ : Formula L) : (Γ ⊢ φ) -> (Γ ⊨ φ) :=
+  fun p α _ M s h => match p with
+  | .asp ψ g => h ψ g
+  | .axm ax => soundness_axiom M s ax
+  | .mp (φ := φ) (ψ := ψ) p q =>
+    (soundness Γ (φ → ψ) p α M s h) (soundness Γ φ q α M s h)
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/FirstOrder/TermModel.lean">
+import PrimaryLogic.FirstOrder.MaximalConsistent
+
+namespace PrimaryLogic
+variable {LF LP : Type} {L : Lang LF LP}
+
+def TermModel (Δ : Set (Formula L)) : Structure L (Term L) where
+  funMap n f := .app n f
+  relMap n p := .atom n p ∈ Δ
+
+variable {Δ : Set (Formula L)}
+
+theorem Term.interpret_termModel (t : Term L) : interpret (TermModel Δ) .var t = t := by
+  induction t with
+  | var i => unfold interpret; rfl
+  | app f s h =>
+    unfold interpret Structure.funMap
+    conv => lhs; arg 0; dsimp only [TermModel]
+    congr; funext k; exact h k
+
+def Formula.henkin (i : Idx) (φ : Formula L) (t : Term L) (h : t.isConst) : Formula L :=
+  (¬∀i# φ) → ¬(safeSub i t φ <| const_FreeFor i φ t h)
+
+class Henkin (Δ : Set (Formula L)) (θ : Formula L -> Term L) : Prop where
+  mc : MaximalConsistent Δ
+  pt : ∀ φ : Formula L, Term.isConst (θ φ)
+  ax : ∀ i : Idx, ∀ φ : Formula L, Formula.henkin i φ (θ φ) (pt φ) ∈ Δ
+
+variable {θ : Formula L -> Term L} [hk : Henkin Δ θ]
+theorem Formula.interpret_termModel [hk : Henkin Δ θ] (φ : Formula L) :
+    interpret (TermModel Δ) .var φ ↔ φ ∈ Δ := by
+  induction hd : φ.depth using Nat.strongRec generalizing φ with
+  | ind d h => cases φ with
+  | atom n s =>
+    unfold interpret Structure.relMap
+    conv =>
+      lhs
+      conv => arg 0; dsimp only [TermModel]
+      conv => arg 2; arg 2; intro i; rw [Term.interpret_termModel (s i)]
+  | falsum =>
+    unfold interpret
+    rw [false_iff ..]
+    by_contra
+    apply hk.mc.left
+    exact .asp (α := FOLAxioms L) .falsum this
+  | impl x y =>
+    unfold interpret
+    unfold depth at hd
+    rw [h x.depth (by omega) x rfl, h y.depth (by omega) y rfl,
+      maxConSet_iff Δ y hk.mc, maxConSet_iff Δ (x → y) hk.mc]
+    constructor
+    · intro p
+      by_cases h : x ∈ Δ
+      · have p' := Proof.axm (α := FOLAxioms L) (Γ := Δ) (.h1 y x)
+        exact .mp p' (p h)
+      · have p1 := (hk.mc.right x).resolve_left h
+        rw [maxConSet_iff Δ _ hk.mc] at p1
+        exact Proof.neg_impl _ _ p1
+    · intro h g
+      rw [maxConSet_iff Δ x hk.mc] at g
+      exact .mp h g
+  | fall i ψ =>
+    unfold interpret; constructor
+    · intro h1
+      unfold depth at hd
+      have h2 := h1 (θ ψ)
+      have h3 := const_FreeFor i ψ (θ ψ) (hk.pt ψ)
+      rw [←Term.interpret_termModel (Δ := Δ) (θ ψ), ←interpret_subst _ _ h3,
+        h ψ.depth (by omega) _ (subst_depth_invariance ..), maxConSet_iff _ _ hk.mc] at h2
+      have h4 : ¬ (Δ ⊢ (¬ (safeSub i (θ ψ) ψ h3))) := by
+        by_contra; exact hk.mc.left <| .mp this h2
+      have p := hk.ax i ψ
+      rw [maxConSet_iff _ _ hk.mc] at p
+      unfold henkin at p
+      by_contra
+      have h6 : (¬∀i# ψ) ∈ Δ := by
+        rcases hk.mc.right (fall i ψ) with hl | hr
+        · exfalso; exact this hl
+        · exact hr
+      rw [maxConSet_iff _ _ hk.mc] at h6
+      exact h4 <| .mp p h6
+    · intro h1 t
+      let χ := ψ.loose t i
+      sorry
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/FirstOrder/Theorem.lean">
+import PrimaryLogic.FirstOrder.Axiom
+
+namespace PrimaryLogic
+namespace Proof
+variable {LF LP : Type} {L : Lang LF LP} {Γ : Set (Formula L)}
+
+private abbrev AX (Δ : Set (Formula L)) := Proof.axm (α := FOLAxioms L) (Γ := Δ)
+
+section propositional
+lemma refl_impl (x : Formula L) : Γ ⊢ x → x :=
+  let p1 := AX Γ <| .h2 x (x → x) x
+  let p2 := AX Γ <| .h1 x (x → x)
+  let p3 := p1.mp p2
+  let p4 := AX Γ <| .h1 x x
+  p3.mp p4
+
+theorem deduction (Γ) (φ ψ : Formula L) :
+    (Γ.insert φ ⊢ ψ) <-> (Γ ⊢ φ → ψ) := by
+  constructor
+  · intro p
+    induction p with
+    | asp x h =>
+      rcases h with (rfl | hi)
+      · exact refl_impl x
+      · exact (AX Γ (.h1 x φ)).mp (asp x hi)
+    | axm a => exact (AX Γ (.h1 (AxiomSchema.toFormula a) φ)).mp (AX Γ a)
+    | @mp x y _ _ h1 h2 => exact ((AX Γ (.h2 φ x y)).mp h1).mp h2
+  · intro p
+    have : FOLProof (Γ.insert φ) (φ → ψ) :=
+      monotone (FOLAxioms L) (Set.subset_insert φ Γ) p
+    exact this.mp (asp φ (Set.mem_insert φ Γ))
+
+lemma impl_trans (x y z : Formula L) :
+    (Γ ⊢ x → y) -> (Γ ⊢ y → z) -> (Γ ⊢ x → z) := fun h g =>
+  have h0 : (Γ.insert _).insert _ = (Γ.insert _).insert _ := Set.insert_comm x (x → y → z) Γ
+  let p1 := AX Γ (.h2 x y z)
+  let p2 := (deduction Γ (x → y → z) ((x → y) → (x → z))).mpr p1
+  let p3 := monotone (FOLAxioms L) (Set.subset_insert (x → y → z) Γ) h
+  let p4 := mp p2 p3
+  let p5 := (deduction _ x z).mpr p4
+  let p6 := cast (by rw [h0]) p5
+  let p7 := (deduction _ (x → y → z) z).mp p6
+  let p8 := AX (Γ.insert x) (.h1 (y → z) x)
+  let p9 := monotone (FOLAxioms L) (Set.subset_insert x Γ) g
+  let p10 := mp p8 p9
+  let p11 := mp p7 p10
+  (deduction Γ x z).mp p11
+
+lemma exfalso (x : Formula L) : Γ ⊢ ⊥ → x :=
+  let p1 := AX Γ <| .h1 ⊥ (x → ⊥)
+  let p2 := AX (Γ.insert ⊥) (.h3 x)
+  let p3 := (deduction Γ ⊥ ((x → ⊥) → ⊥)).mpr p1
+  let p4 := p2.mp p3
+  (deduction Γ ⊥ x).mp p4
+
+lemma neg_impl (x y : Formula L) : (Γ ⊢ ¬x) -> (Γ ⊢ x → y) := fun h =>
+  let p1 := AX Γ <| .h2 x ⊥ y
+  let p2 := exfalso (Γ := Γ) y
+  let p3 := AX Γ <| .h1 (⊥ → y) x
+  let p4 := mp p3 p2
+  let p5 := mp p1 p4
+  mp p5 h
+
+lemma intro_double_neg (x : Formula L) : Γ ⊢ x → ¬¬x :=
+  let Δ := (Γ.insert x).insert (x → ⊥)
+  let as := asp (α := FOLAxioms L) (Γ := Δ)
+  let p1 := as (x → ⊥) <| by simp [Δ, Set.insert]
+  let p2 := as x <| by simp [Δ, Set.insert]
+  let p3 := p1.mp p2
+  let p4 := deduction (Γ.insert x) (x → ⊥) ⊥
+  let p5 := p4.mp p3
+  (deduction Γ x ((x → ⊥) → ⊥)).mp p5
+
+lemma contrapositive (x y : Formula L) : Γ ⊢ (¬x → ¬y) → (y → x) :=
+  let Δ := (Γ.insert ((x → ⊥) → (y → ⊥))).insert y
+  let as := asp (α := FOLAxioms L) (Γ := Δ.insert (x → ⊥))
+  let p1 := as ((x → ⊥) → (y → ⊥)) <| by simp [Δ, Set.insert]
+  let p2 := as y <| by simp [Δ, Set.insert]
+  let p3 := as (x → ⊥) <| by simp [Set.insert]
+  let p4 := p1.mp p3
+  let p5 := p4.mp p2
+  let p6 := (deduction Δ (x → ⊥) ⊥).mp p5
+  let p7 := Proof.axm (α := FOLAxioms L) (Γ := Δ) (.h3 x)
+  let p8 := p7.mp p6
+  let p9 := (deduction (Γ.insert ((x → ⊥) → (y → ⊥))) y x).mp p8
+  (deduction Γ ((x → ⊥) → (y → ⊥)) (y → x)).mp p9
+
+lemma raa (x : Formula L) : (Γ ⊢ x) <-> Inconsistent (FOLAxioms L) (Γ.insert (¬x)) := by
+  unfold Inconsistent
+  constructor
+  · intro p
+    apply (deduction Γ (¬x) .falsum).mpr
+    exact (intro_double_neg x).mp p
+  · intro p
+    apply (AX Γ (.h3 x)).mp
+    exact (deduction Γ (¬x) .falsum).mp p
+end propositional
+
+variable (Γ : Set (Formula L))
+
+section quantifier
+theorem gen_rule (φ : Formula L) (i : Idx) :
+    (∀ g ∈ Γ, i ∉ g.fVars) -> (Γ ⊢ φ) -> (Γ ⊢ ∀i# φ) := by
+  intro hg p
+  induction p with
+  | asp ψ h => exact (AX Γ (.q3 i ψ (hg ψ h))).mp (asp ψ h)
+  | axm a => exact AX Γ (.gen i a)
+  | @mp x y _ _ p1 p2 => exact ((AX Γ (.q1 i x y)).mp p1).mp p2
+
+lemma all_elim (φ : Formula L) (i : Idx) : Γ ⊢ (∀i# φ) → φ :=
+  let h := Formula.fVar_refl i φ
+  let p : FOLProof Γ ((∀i# φ) → (φ.safeSub i (.var i) h)) :=
+    AX Γ (.q2 i (.var i) φ h)
+  cast (congrArg (Γ ⊢ (∀i# φ) → ·) <| Formula.subst_self i φ h) p
+
+lemma all_comm (φ : Formula L) (i j : Idx) :
+    Γ.insert (∀i#∀j# φ) ⊢ ∀j#∀i# φ :=
+  let p1 := all_elim ∅ φ j
+  let p2 := all_elim ∅ (∀j# φ) i
+  let p3 := impl_trans (∀i#∀j# φ) (∀j# φ) φ p2 p1
+  let p4 := (deduction ∅ ..).mpr p3
+  have hi : ∀ g ∈ Set.insert (∀i#∀j# φ) ∅, i ∉ g.fVars := by
+    intro g;
+    simp only [Set.insert, Set.mem_empty_iff_false, or_false,
+      Set.setOf_eq_eq_singleton, Set.mem_singleton_iff]
+    intro gh; rw[gh]
+    simp [Formula.fVars]
+  have hj : ∀ g ∈ Set.insert (∀i#∀j# φ) ∅, j ∉ g.fVars := by
+    intro g;
+    simp only [Set.insert, Set.mem_empty_iff_false, or_false,
+      Set.setOf_eq_eq_singleton, Set.mem_singleton_iff]
+    intro gh; rw[gh]
+    simp [Formula.fVars]
+  let p5 := gen_rule _ φ i hi p4
+  let p6 := gen_rule _ (∀i# φ) j hj p5
+  let p7 := (deduction ∅ _ _).mp p6
+  let p8 := Proof.monotone (FOLAxioms L) (Set.empty_subset Γ) p7
+  (deduction Γ ..).mpr p8
+end quantifier
+
+theorem Formula.loose_FreeFor (i : Idx) (t : Term L) (φ : Formula L) :
+    ({φ.loose t i} ⊢ φ) ∧ ({φ} ⊢ φ.loose t i) := sorry
+
+end Proof
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/Encoding.lean">
+import PrimaryLogic.Formula
+import Mathlib.Computability.Encoding
+import Mathlib.Logic.Encodable.Basic
+import Mathlib.Logic.Encodable.Pi
+
+namespace PrimaryLogic
+/- I referred to the code of `Mathlib.ModelTheory.Encoding`.
+  The encoding is mainly used for enumeration. -/
+variable {LF LP : Type} {L : Lang LF LP}
+
+def Term.listEncode : Term L -> List (Idx ⊕ LF)
+  | var i => [.inl i]
+  | app f s => .inr f :: (List.finRange (L.funcs f)).flatMap fun i => (s i).listEncode
+
+def Term.listDecode : List (Idx ⊕ LF) -> List (Term L)
+  | [] => []
+  | .inl i :: l => var i :: listDecode l
+  | .inr f :: l =>
+    letI s := listDecode l
+    letI n := L.funcs f
+    if h : n ≤ s.length then
+      app f (fun i => s[i]) :: s.drop n
+    else []
+
+open List in
+theorem Term.listDecode_encode_list (l : List (Term L)) :
+    listDecode (l.flatMap listEncode) = l := by
+  suffices h : ∀ (t : Term L) (l : List (Idx ⊕ LF)),
+      listDecode (t.listEncode ++ l) = t :: listDecode l by
+    induction l with
+    | nil => eq_refl
+    | cons t l lih => rw [flatMap_cons, h t (l.flatMap listEncode), lih]
+  intro t l
+  induction t generalizing l with
+  | var => rw [listEncode, singleton_append, listDecode]
+  | app f ts ih =>
+    simp only [listEncode, listDecode, cons_append, Fin.getElem_fin]
+    let n := L.funcs f
+    have h : listDecode (((finRange n).flatMap fun i : Fin n => (ts i).listEncode) ++ l) =
+        (finRange n).map ts ++ listDecode l := by
+      induction finRange n with
+      | nil => eq_refl
+      | cons i l' l'ih => rw [flatMap_cons, append_assoc, ih, map_cons, l'ih, cons_append]
+    conv =>
+      lhs; lhs; ext
+      conv => lhs; rhs; ext; arg 1; rw [h]
+      conv => rhs; rw [h]
+    split_ifs with hi
+    · rw [h] at hi
+      rw [length_append, length_map, length_finRange] at hi
+      rw [cons.injEq, app.injEq, heq_eq_eq]
+      refine ⟨⟨rfl, ?_⟩, ?_⟩
+      · funext k
+        rw [getElem_append_left, getElem_map, getElem_finRange, Fin.cast_mk, Fin.eta]
+        rw [length_map, length_finRange]
+        exact Fin.is_lt k
+      · rw [drop_left']; rw [length_map, length_finRange]
+    · rw [h] at hi;
+      rw [length_append, length_map, length_finRange] at hi;
+      simp [n] at hi
+
+protected def Term.encoding : Computability.Encoding (Term L) where
+  Γ := Idx ⊕ LF
+  encode := listEncode
+  decode l := (listDecode l).head?
+  decode_encode t := by
+    have h := listDecode_encode_list [t]
+    rw [List.flatMap_singleton] at h
+    simp only [h, List.head?_cons]
+
+instance [Encodable LF] : Encodable (Term L) :=
+  Encodable.ofLeftInjection Term.listEncode (fun l => (Term.listDecode l).head?) fun t => by
+    simp only
+    rw [← List.flatMap_singleton Term.listEncode, Term.listDecode_encode_list]
+    simp only [List.head?_cons]
+
+abbrev PredArgs (L : Lang LF LP) := Σ p : LP, Fin (L.preds p) -> Term L
+instance [Encodable LP] [Encodable LF] : Encodable (PredArgs L) := by infer_instance
+
+def Formula.listEncode : Formula L -> List (PredArgs L ⊕ Bool ⊕ Idx)
+  | atom p s => [.inl (⟨p, (s ·)⟩)]
+  | falsum => [.inr (.inl false)]
+  | impl φ ψ => .inr (.inl true) :: (φ.listEncode ++ ψ.listEncode)
+  | fall i φ => .inr (.inr i) :: φ.listEncode
+
+def Formula.listDecode : List (PredArgs L ⊕ Bool ⊕ Idx) -> List (Formula L)
+  | .inl ⟨p, s⟩ :: l => atom p s :: listDecode l
+  | .inr (.inl false) :: l => falsum :: listDecode l
+  | .inr (.inl true) :: l =>
+    letI s := listDecode l
+    if h : s.length ≥ 2 then
+      impl s[0] s[1] :: s.drop 2
+    else []
+  | .inr (.inr i) :: l =>
+    match listDecode l with
+    | [] => []
+    | φ :: v => fall i φ :: v
+  | _ => []
+
+theorem Formula.listDecode_encode_list (l : List (Formula L)) :
+    listDecode (l.flatMap listEncode) = l := by
+  open List in
+  suffices h : ∀ (φ : Formula L) (l : List (PredArgs L ⊕ Bool ⊕ Idx)),
+      listDecode (φ.listEncode ++ l) = φ :: listDecode l by
+    induction l with
+    | nil => eq_refl
+    | cons t l lih => rw [flatMap_cons, h t (l.flatMap listEncode), lih]
+  intro φ l
+  induction φ generalizing l with
+  | atom n s | falsum => rw [listEncode, singleton_append, listDecode]
+  | impl x y hx hy =>
+    rw [listEncode, cons_append, listDecode]
+    split_ifs with h'
+    · simp [append_assoc, hx _ ,hy _, List.drop]
+    · rw [append_assoc, hx _, hy _, length_cons, length_cons] at h'
+      simp only [Nat.le_add_left, ge_iff_le] at h'
+      contradiction
+  | fall i x h =>
+    rw [listEncode, cons_append, listDecode]
+    cases h' : listDecode (x.listEncode ++ l) with
+    | nil => simp [h l] at h'
+    | cons y v =>
+      simp only [cons.injEq, eq_self, fall.injEq, true_and];
+      rw [h l, cons.injEq] at h'
+      exact ⟨h'.left.symm, h'.right.symm⟩
+
+protected def Formula.encoding : Computability.Encoding (Formula L) where
+  Γ := PredArgs L ⊕ Bool ⊕ Idx
+  encode := listEncode
+  decode l := (listDecode l).head?
+  decode_encode t := by
+    have h := listDecode_encode_list [t]
+    rw [List.flatMap_singleton] at h
+    simp only [h, List.head?_cons]
+
+instance [Encodable LF] [Encodable LP] : Encodable (Formula L) :=
+  Encodable.ofLeftInjection Formula.listEncode (fun l => (Formula.listDecode l).head?) fun t => by
+    simp only
+    rw [← List.flatMap_singleton Formula.listEncode, Formula.listDecode_encode_list]
+    simp only [List.head?_cons]
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/Formula.lean">
+import PrimaryLogic.Tool
+import Mathlib.CategoryTheory.Category.Basic
+import Mathlib.CategoryTheory.Functor.Basic
+import Mathlib.Data.Finset.Union
+
+namespace PrimaryLogic
+variable {LF LP : Type}
+
+section language
+
+structure Lang (LF LP : Type) where
+  funcs : LF -> Nat
+  preds : LP -> Nat
+
+end language
+
+variable {L : Lang LF LP}
+
+-- `args` in `Term.app` was typed by `Vector (Term L) L.funcs[n]` at first,
+-- but Lean4 does not support recusive type parameter.
+-- And `args` in `Formula.atom` continue this type design for unified pattern.
+inductive Term (L : Lang LF LP) : Type
+  | var (i : Idx)
+  | app (n : LF) (args : Fin (L.funcs n) -> Term L)
+
+/- The `must` constructor is originally designed for modal logic,
+    while it is temporarily unnecessary for this project,
+    which rarely involves theories outside FOL.
+  It might be reintroduced one day I found that it would be safe enough to do so,
+    meaning having minimal impact on other theorem.
+  Before that day, I prioritize the constuction of the sound and complete FOL theory. -/
+inductive Formula (L : Lang LF LP) : Type
+  | atom (n : LP) (args : Fin (L.preds n) -> Term L)
+  | falsum
+  | impl : Formula L -> Formula L -> Formula L
+  | fall : Idx -> Formula L -> Formula L
+--  | must : Formula L -> Formula L
+
+instance : Inhabited (Term L) := ⟨.var 0⟩
+instance : Inhabited (Formula L) := ⟨.falsum⟩
+
+class AxiomSchema (L : Lang LF LP) (α : Type) where
+  toFormula : α -> Formula L
+
+def AxiomSchema.toSet (α : Type) [AxiomSchema L α] : Set (Formula L) :=
+  Set.range fun a : α => AxiomSchema.toFormula (L := L) a
+
+def Term.isConst : Term L -> Prop
+  | var _ => False
+  | app n _ => L.funcs n = 0
+
+def Const (L : Lang LF LP) := { t : Term L // t.isConst }
+def Term.mkConst (n : LF) (h : L.funcs n = 0) : Term L :=
+  .app n <| cast (congrArg (Fin · -> Term L) h.symm) Fin.elim0
+
+section eq
+variable [DecidableEq LF]
+
+def Term.beq : Term L → Term L → Bool
+  | .var i, .var j => i == j
+  | .app i ai, .app j aj =>
+    if hi : i = j then by
+      subst hi
+      exact forallInFin (n :=  L.funcs i)
+        fun k => Term.beq (ai k) (aj k)
+    else false
+  | _, _ => false
+
+theorem Term.beq_iff_eq (t s : Term L) : Term.beq t s = true ↔ t = s := by
+  induction t generalizing s with
+  | var => cases s <;> simp [Term.beq]
+  | app i ai ht => cases s with
+    | var => simp [Term.beq]
+    | app j aj =>
+      unfold Term.beq
+      split_ifs with hi
+      · subst hi
+        simp only [Term.app.injEq, heq_eq_eq, true_and]
+        rw [forallInFin_eq (L.funcs i)]
+        have (k : Fin (L.funcs i)) := ht k (aj k)
+        constructor
+        · intro h
+          funext k
+          exact (this k).mp (h k)
+        · intro h k
+          exact (this k).mpr (congrFun h k)
+      · simp [hi]
+
+instance : BEq (Term L) := ⟨Term.beq⟩
+
+instance Term.decidableEq : DecidableEq (Term L) := by
+  intro t s
+  by_cases h : Term.beq t s
+  · exact isTrue ((Term.beq_iff_eq t s).mp h)
+  · exact isFalse (by intro h_eq; rw [←Term.beq_iff_eq t s] at h_eq; contradiction)
+
+variable [DecidableEq LP]
+def Formula.beq : Formula L → Formula L → Bool
+  | .atom i ai, .atom j aj =>
+    if h : i = j then by
+      subst h
+      exact forallInFin (L.preds i)
+        fun k => Term.beq (ai k) (aj k)
+      else false
+  | .falsum, .falsum => true
+  | .impl φ ψ, .impl φ' ψ' => φ.beq φ' && ψ.beq ψ'
+  | .fall i φ, .fall j ψ => i == j && φ.beq ψ
+  | _, _ => false
+
+theorem Formula.beq_iff_eq (φ ψ : Formula L) : Formula.beq φ ψ = true ↔ φ = ψ := by
+  induction φ generalizing ψ with
+  | atom i ai => cases ψ with
+    | atom j aj =>
+      unfold Formula.beq
+      split_ifs with hi
+      · subst hi
+        simp only [atom.injEq, true_and, heq_eq_eq]
+        rw [forallInFin_eq (L.preds i)]
+        constructor
+        · intro h; funext k
+          rw [←Term.beq_iff_eq (ai k) (aj k)]
+          exact h k
+        · intro h_eq k
+          rw [Term.beq_iff_eq (ai k) (aj k), h_eq]
+      · simp [hi]
+    | _ => simp [Formula.beq]
+  | falsum => cases ψ <;> simp [Formula.beq]
+  | impl a b ha hb => cases ψ with
+    | impl c d => simp [ha c, hb d, Formula.beq]
+    | _ => simp [Formula.beq]
+  | fall i a hi => cases ψ with
+    | fall j b => simp [hi b, Formula.beq]
+    | _ => simp [Formula.beq]
+
+instance : BEq (Formula L) := ⟨Formula.beq⟩
+
+instance Formula.decidableEq : DecidableEq (Formula L) := by
+  intro t s
+  by_cases h : Formula.beq t s
+  · exact isTrue ((Formula.beq_iff_eq t s).mp h)
+  · exact isFalse (by intro h_eq; rw [←Formula.beq_iff_eq t s] at h_eq; contradiction)
+
+end eq
+
+section subst
+
+namespace Term
+def vars : Term L -> Finset Idx
+  | var i => {i}
+  | app n args => (Finset.univ : Finset (Fin (L.funcs n))).biUnion
+    fun k => (args k).vars
+
+def funs [DecidableEq LF] : Term L -> Finset LF
+  | .var _ => ∅
+  | .app f s => insert f <|
+    (Finset.univ : Finset (Fin (L.funcs f))).biUnion fun k => funs (s k)
+
+def subst (i : Idx) (t : Term L) : Term L -> Term L
+  | var j => if i = j then t else .var j
+  | app n args => .app n fun k => t.subst i (args k)
+
+def substFun [DecidableEq LF] (t : Term L) (f : LF) : Term L -> Term L
+  | x@(.var _) => x
+  | .app n s => if n = f then t else .app n fun k => substFun t f (s k)
+
+end Term
+
+namespace Formula
+def vars : Formula L -> Finset Idx
+  | atom n args =>
+    (Finset.univ : Finset (Fin (L.preds n))).biUnion
+      fun k => (args k).vars
+  | falsum => ∅
+  | impl φ ψ => φ.vars ∪ ψ.vars
+  | fall i φ => insert i φ.vars
+
+def fVars : Formula L -> Finset Idx
+  | atom n args =>
+    (Finset.univ : Finset (Fin (L.preds n))).biUnion
+      fun k => (args k).vars
+  | falsum => ∅
+  | impl φ ψ => φ.fVars ∪ ψ.fVars
+  | fall i φ => φ.fVars.erase i
+
+def bVars : Formula L -> Finset Idx
+  | atom .. | falsum => ∅
+  | impl φ ψ => (bVars φ) ∪ (bVars ψ)
+  | fall i φ => insert i (bVars φ)
+
+def funs [DecidableEq LF] : Formula L -> Finset LF
+  | .atom p s => (Finset.univ : Finset (Fin (L.preds p))).biUnion fun k => Term.funs (s k)
+  | .falsum => ∅
+  | .impl φ ψ => funs φ ∪ funs ψ
+  | .fall _ φ => funs φ
+
+def FreeFor (i : Idx) (t : Term L) : Formula L -> Prop
+  | atom .. | falsum => True
+  | impl φ ψ => φ.FreeFor i t ∧ ψ.FreeFor i t
+  | fall j φ => i = j ∨ i ∉ φ.fVars ∨ j ∉ t.vars ∧ φ.FreeFor i t
+
+def subst (i : Idx) (t : Term L) (φ : Formula L) : Formula L :=
+  match φ with
+  | atom n args => atom n (fun k => Term.subst i t (args k))
+  | falsum => falsum
+  | impl ψ χ => impl (ψ.subst i t) (χ.subst i t)
+  | fall j ψ => if i = j then fall j ψ else fall j (ψ.subst i t)
+
+theorem out_var_is_free_for_any_term {i : Idx} (t : Term L) {φ : Formula L} :
+    i ∉ φ.fVars -> φ.FreeFor i t := by
+  intro h
+  induction φ with
+  | atom | falsum => unfold FreeFor; exact .intro
+  | impl ψ χ ha hb =>
+    simp [fVars] at h
+    unfold FreeFor
+    exact ⟨ha h.left, hb h.right⟩
+  | fall j ψ _ =>
+    simp only [fVars, Finset.mem_erase, ne_eq, not_and] at h
+    unfold FreeFor
+    by_cases h' : i = j
+    · left; exact h'
+    · right; left; exact h h'
+
+def safeSub (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t) : Formula L :=
+  match φ with
+  | atom n args => atom n (fun k => Term.subst i t (args k))
+  | falsum => falsum
+  | impl ψ χ => impl (ψ.safeSub i t h.left) (χ.safeSub i t h.right)
+  | fall j ψ => if hi : i = j then fall j ψ else
+    have h' : ψ.FreeFor i t := by
+      unfold FreeFor at h
+      rcases h with h1 | h2 | h3
+      · exfalso; exact hi h1
+      · exact Formula.out_var_is_free_for_any_term t h2
+      · exact h3.right
+    fall j (ψ.safeSub i t h')
+
+def substFun [DecidableEq LF] (t : Term L) (f : LF) : Formula L -> Formula L
+  | .atom p s => .atom p fun k => Term.substFun t f (s k)
+  | .falsum => .falsum
+  | .impl φ ψ => .impl (φ.substFun t f) (ψ.substFun t f)
+  | .fall i φ => .fall i (φ.substFun t f)
+
+-- Prepared for completeness proofs.
+def loose (t : Term L) (i : Idx) : Formula L -> Formula L
+  | x@(.atom ..) => x
+  | .falsum => .falsum
+  | .impl φ ψ => .impl (φ.loose t i) (ψ.loose t i)
+  | .fall j φ =>
+    let ψ := φ.loose t i
+    let k := Freshable.fresh (insert i (ψ.vars ∪ t.vars))
+    .fall k (ψ.subst j (.var k))
+
+structure axiomMor (L : Lang LF LP) (c : LF) (s : Finset Idx) where
+  τ : Term L -> Term L
+  f : Formula L -> Formula L
+  map_falsum : f falsum = falsum
+  map_impl : ∀ φ ψ, f (impl φ ψ) = impl (f φ) (f ψ)
+  map_fall : ∀ i φ, f (fall i φ) = fall i (f φ)
+  free_var : ∀ {i}, ∀ {φ : Formula L}, i ∉ φ.fVars → i ∈ s → φ.vars ⊆ s → i ∉ (f φ).fVars
+  free_for : ∀ {i t φ}, FreeFor i t φ → i ∈ s → φ.bVars ⊆ s  → FreeFor i (τ t) (f φ)
+  subst_comm : ∀ {i t φ} h, (h1 : i ∈ s) → (h2 : φ.bVars ⊆ s) →
+    f (safeSub i t φ h) = safeSub i (τ t) (f φ) (free_for h h1 h2)
+end Formula
+
+end subst
+
+
+def Formula.close (φ : Formula L) : Formula L :=
+  φ.fVars.sort.foldr fall φ
+
+def Sentence (L : Lang LF LP) := { φ : Formula L // φ.fVars = ∅ }
+instance : Coe (Sentence L) (Formula L) := ⟨fun x => x.val⟩
+
+section depth
+
+def Formula.depth : Formula L -> Nat
+  | atom .. | falsum => 0
+  | impl φ ψ => max (φ.depth) (ψ.depth) + 1
+  | fall _ φ => φ.depth + 1
+
+theorem Formula.subst_depth_invariance (i : Idx) (t : Term L) (φ : Formula L)
+    (h : FreeFor i t φ) : (φ.safeSub i t h).depth = φ.depth := by
+  induction φ with
+  | atom | falsum => unfold safeSub depth; rfl
+  | impl x y hx hy =>
+    dsimp [safeSub, depth]
+    unfold FreeFor at h
+    rw [Nat.add_right_cancel_iff]
+    apply congr_arg₂
+    · exact hx h.left
+    · exact hy h.right
+  | fall j ψ h' =>
+    dsimp [safeSub, depth]
+    unfold FreeFor at h
+    split_ifs with hi
+    · conv => lhs; unfold depth
+    · conv => lhs; unfold depth
+      rw [Nat.add_right_cancel_iff]
+      rcases h with h1 | h2 | h3
+      · exfalso; exact hi h1
+      · exact h' <| out_var_is_free_for_any_term t h2
+      · exact h' h3.right
+
+theorem Formula.substFun_depth_invariance [DecidableEq LF] (f : LF) (t : Term L) (φ : Formula L) :
+    φ.depth = (φ.substFun t f).depth := by
+  induction φ <;> unfold substFun depth <;> omega
+
+end depth
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/Hom.lean">
+import PrimaryLogic.Formula
+
+namespace PrimaryLogic
+
+variable {LF F1 F2 F3 LP P1 P2 P3 : Type} {L1 : Lang F1 P1} {L2 : Lang F2 P2} {L3 : Lang F3 P3}
+
+namespace Lang
+structure Hom (L1 : Lang F1 P1) (L2 : Lang F2 P2) where
+  funcMap : F1 -> F2
+  predMap : P1 -> P2
+  func_arity' : L1.funcs = L2.funcs ∘ funcMap
+  pred_arity' : L1.preds = L2.preds ∘ predMap
+
+structure Embedding (L1 : Lang F1 P1) (L2 : Lang F2 P2) extends Hom L1 L2 where
+  func_inj' : Function.Injective funcMap
+  pred_inj' : Function.Injective predMap
+
+def expandConst (C : Type) (L : Lang LF LP) : Lang (LF ⊕ C) LP where
+  funcs := Sum.elim L.funcs (Function.const C 0)
+  preds := L.preds
+
+instance (C : Type) (L : Lang LF LP) : Embedding L (expandConst C L) where
+  funcMap := .inl
+  predMap := id
+  func_arity' := rfl
+  pred_arity' := rfl
+  func_inj' := Function.Embedding.inl.inj'
+  pred_inj' := (Function.Embedding.refl LP).inj'
+
+def expandCountable (L : Lang LF LP) : Lang (LF ⊕ Bool) LP where
+  funcs := Sum.elim L.funcs Bool.toNat
+  preds := L.preds
+
+def Hom.id (L : Lang LF LP) : Lang.Hom L L :=
+  ⟨_root_.id, _root_.id, rfl, rfl⟩
+
+def Hom.comp {L1 : Lang F1 P1} {L2 : Lang F2 P2} {L3 : Lang F3 P3}
+    (g : Hom L2 L3) (f : Hom L1 L2) : Hom L1 L3 where
+  funcMap := g.funcMap ∘ f.funcMap
+  predMap := g.predMap ∘ f.predMap
+  func_arity' := by rw [f.func_arity', g.func_arity', Function.comp_assoc]
+  pred_arity' := by rw [f.pred_arity', g.pred_arity', Function.comp_assoc]
+
+end Lang
+
+structure LangType : Type 1 where
+  {LF : Type}
+  {LP : Type}
+  L : Lang LF LP
+
+@[reducible]
+def LangCat : CategoryTheory.Category LangType where
+  Hom X Y := Lang.Hom X.L Y.L
+  id X := Lang.Hom.id X.L
+  comp f g := g.comp f
+
+def Term.homLang (f : Lang.Hom L1 L2) : Term L1 -> Term L2
+  | .var i => .var i
+  | .app n ts => .app (f.funcMap n) fun i => homLang f <| ts <|
+    cast (congrArg Fin (f.func_arity' ▸ rfl)) i
+
+namespace Formula
+def homLang (f : Lang.Hom L1 L2) : Formula L1 -> Formula L2
+  | .atom n ts => .atom (f.predMap n) fun i => Term.homLang f <| ts <|
+    cast (congrArg Fin (f.pred_arity' ▸ rfl)) i
+  | .falsum => .falsum
+  | .impl φ ψ => .impl (homLang f φ) (homLang f ψ)
+  | .fall i φ => .fall i (homLang f φ)
+
+structure Hom (L1 : Lang F1 P1) (L2 : Lang F2 P2) where
+  toFun : Formula L1 -> Option (Formula L2)
+  map_falsum' : toFun falsum = some falsum
+  map_impl' : ∀ φ ψ, toFun (impl φ ψ) = match toFun φ, toFun ψ with
+    | some φ', some ψ' => some (impl φ' ψ') | _, _ => none
+
+def Hom.ofLang (f : Lang.Hom L1 L2) : Hom L1 L2 :=
+  ⟨fun φ => some (homLang f φ), by dsimp [homLang], by simp [homLang]⟩
+
+def Hom.id (L : Lang LF LP) : Hom L L := ⟨(some ·), by dsimp, by simp⟩
+
+def Hom.comp (g : Hom L2 L3) (f : Hom L1 L2) : Hom L1 L3 where
+  toFun X := (f.toFun X).bind g.toFun
+  map_falsum' := by rw [f.map_falsum', Option.bind, g.map_falsum']
+  map_impl' φ ψ := by
+    rw [f.map_impl']
+    match f.toFun φ, f.toFun ψ with
+      | some φ', some ψ' => dsimp; rw [g.map_impl']
+      | _, none | none, _ => simp
+
+end Formula
+
+open Formula in
+@[reducible]
+def FormulaCat : CategoryTheory.Category LangType where
+  Hom X Y := Formula.Hom X.L Y.L
+  id X := Formula.Hom.id X.L
+  comp f g := g.comp f
+  id_comp := by intros; dsimp only [Hom.id, Hom.comp, Option.bind_some]
+  comp_id := by intros; simp only [Hom.id, Hom.comp, Option.bind_fun_some]
+  assoc := by intros; simp only [Hom.comp, Option.bind_assoc]
+
+variable {L : Lang LF LP}
+lemma Term.homLang_id_eq : Term.homLang (Lang.Hom.id L) = _root_.id := by
+  funext t
+  induction t with
+  | var i => eq_refl
+  | app n s h =>
+    simp only [homLang, id]
+    congr; funext i; exact h i
+
+lemma Formula.homLang_id_eq : Formula.homLang (Lang.Hom.id L) = _root_.id := by
+  funext φ
+  rw [id]
+  induction φ with
+  | atom n s =>
+    simp only [homLang, atom.injEq]
+    constructor
+    · dsimp [Lang.Hom.id]
+    · rw [Term.homLang_id_eq]
+      conv => left; intro i; rw [id]
+      apply heq_of_eq
+      funext; congr
+  | falsum => eq_refl
+  | impl x y hx hy => simp only [homLang, impl.injEq]; exact ⟨hx, hy⟩
+  | fall i x h => simp only [homLang, h]
+
+theorem Formula.Hom.ofLang_id_eq : Hom.ofLang (Lang.Hom.id L) = Formula.Hom.id L := by
+  simp [Hom.ofLang, Formula.Hom.id, Formula.homLang_id_eq]
+
+lemma Term.homLang_comp_eq {f : Lang.Hom L1 L2} {g : Lang.Hom L2 L3} :
+    homLang (g.comp f) = (homLang g) ∘ (homLang f) := by
+  funext t
+  induction t with
+  | var i => dsimp [homLang]
+  | app n s h =>
+    simp only [homLang, Function.comp_apply, cast_cast]
+    congr; funext i; apply h
+
+lemma Formula.homLang_comp_eq {f : Lang.Hom L1 L2} {g : Lang.Hom L2 L3} :
+    homLang (g.comp f) = (homLang g) ∘ (homLang f) := by
+  funext φ
+  induction φ with
+  | atom n s =>
+    simp only [homLang, Function.comp_apply, cast_cast]
+    congr; funext i; rw [Term.homLang_comp_eq]; eq_refl
+  | falsum => eq_refl
+  | impl x y hx hy => simp only [homLang, Function.comp_apply, impl.injEq]; exact ⟨hx, hy⟩
+  | fall i x h => simp only [homLang, Function.comp_apply, h]
+
+theorem Formula.Hom.ofLang_comp_eq {f : Lang.Hom L1 L2} {g : Lang.Hom L2 L3} :
+    Hom.ofLang (g.comp f) = (Hom.ofLang g).comp (Hom.ofLang f) := by
+  simp [Hom.ofLang, Hom.comp, Formula.homLang_comp_eq]
+
+def LangFormulaFunctor := @CategoryTheory.Functor.mk LangType LangCat LangType FormulaCat id
+  (Formula.Hom.ofLang ·)
+  (by intros; dsimp only [LangCat, FormulaCat]; exact Formula.Hom.ofLang_id_eq)
+  (by intros; dsimp only [LangCat, FormulaCat]; exact Formula.Hom.ofLang_comp_eq)
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/Model.lean">
+import PrimaryLogic.Formula
+import PrimaryLogic.Vars
+
+namespace PrimaryLogic
+
+variable {LF LP : Type} {L : Lang LF LP} {α : Type} [Inhabited α]
+
+@[ext]
+structure Structure (L : Lang LF LP) (α : Type) [Inhabited α] : Type where
+  funMap : (n : LF) -> (Fin (L.funcs n) -> α) -> α
+  relMap : (n : LP) -> (Fin (L.preds n) -> α) -> Prop
+
+def Term.interpret (M : Structure L α) (s : Assignment α) : Term L -> α
+  | .var i => s i
+  | .app n args => M.funMap n fun i => (args i).interpret M s
+
+def Formula.interpret (M : Structure L α) (s : Assignment α) : Formula L -> Prop
+  | .atom n args => M.relMap n fun i => (args i).interpret M s
+  | .falsum => False
+  | .impl φ ψ => (φ.interpret M s) → (ψ.interpret M s)
+  | .fall i φ => ∀ a : α, φ.interpret M (replace s i a)
+
+def Structure.satisfies (M : Structure L α) (Γ : Set (Formula L)) (φ : Formula L) : Prop :=
+  ∀ s : Assignment α, (∀ g ∈ Γ, g.interpret M s) -> φ.interpret M s
+
+abbrev Structure.models (M : Structure L α) (φ : Formula L) : Prop := M.satisfies ∅ φ
+
+abbrev Structure.modelsOf (M : Structure L α) (Γ : Set (Formula L)) := ∀ g : Γ, M.models g
+
+@[simp]
+theorem Structure.models_reduce (M : Structure L α) (φ : Formula L) :
+    M.models φ <-> ∀ s : Assignment α, φ.interpret M s := by
+  unfold models; unfold Structure.satisfies; simp [Set.mem_empty_iff_false]
+
+def SemanticConsequence (Γ : Set (Formula L)) (φ : Formula L) : Prop :=
+  ∀ (α : Type) [Inhabited α] (M : Structure L α), M.satisfies Γ φ
+infix:20 " ⊨ " => SemanticConsequence
+
+lemma SemanticConsequence.monotone {Γ Δ} (φ : Formula L) :
+    Γ ⊆ Δ -> (Γ ⊨ φ) -> (Δ ⊨ φ) :=
+  fun h0 h1 β _ M s h2 =>
+    (h1 β M) s fun g hg => h2 g (Set.mem_of_subset_of_mem h0 hg)
+
+abbrev Formula.valid (φ : Formula L) := SemanticConsequence ∅ φ
+prefix:21 "⊨ " => Formula.valid
+
+def Satisfiable (Γ : Set (Formula L)) : Prop :=
+  ∃ (α : Type) (_ : Inhabited α) (M : Structure L α) (s : Assignment α),
+  ∀ g ∈ Γ, g.interpret M s
+
+def Mod (Γ : Set (Formula L)) (α : Type) [Inhabited α] := { M : Structure L α // M.modelsOf Γ }
+
+def ModAll (Γ : Set (Formula L)) : Type 1 := Σ (β : Type), Σ (_ : Inhabited β), Mod Γ β
+
+def DefinableSet (M : Structure L α) (φ : Formula L) := { s : Assignment α // φ.interpret M s }
+
+def Structure.definableSets (M : Structure L α) : Set (Set (Assignment α)) :=
+  { S | ∃ φ, S = DefinableSet M φ }
+section interpret
+
+lemma Term.interpret_coincidence (M) {x : Term L} {s t : Assignment α} :
+    (∀ i ∈ x.vars, s i = t i) -> x.interpret M s = x.interpret M t := by
+  intro hx
+  induction x with
+  | var i =>
+    unfold Term.interpret
+    exact hx i (Finset.mem_singleton_self i)
+  | app m ms f =>
+    unfold Term.interpret
+    simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and, forall_exists_index] at hx
+    conv =>
+      lhs; arg 3; intro fi
+      exact f fi fun i hi => hx i fi hi
+
+lemma Term.interpret_replace_invariance
+    (M) {t : Term L} (s : Assignment α) (a : α) {i : Idx} :
+    i ∉ t.vars -> t.interpret M (replace s i a) = t.interpret M s := by
+  intro hi
+  apply interpret_coincidence M
+  simp only [ite_eq_right_iff]
+  intro j hj h
+  rw [h] at hj
+  exfalso
+  exact hi hj
+
+theorem Formula.interpret_coincidence (M) {φ : Formula L} (s t : Assignment α) :
+    (∀ i ∈ φ.fVars, s i = t i) -> (φ.interpret M s <-> φ.interpret M t) := by
+  intro h
+  induction φ generalizing s t with
+  | atom n ns =>
+    unfold interpret
+    simp only [fVars, Finset.mem_biUnion, Finset.mem_univ, true_and, forall_exists_index] at h
+    conv =>
+      lhs; arg 3; intro fi;
+      exact Term.interpret_coincidence M fun i hi => h i fi hi
+  | falsum => unfold interpret; decide
+  | impl φ ψ ha hb =>
+    unfold interpret
+    simp only [fVars, Finset.mem_union] at h
+    have h1 := ha s t fun i hi => h i (.inl hi)
+    have h2 := hb s t fun i hi => h i (.inr hi)
+    rw [h1, h2]
+  | fall i φ hi =>
+    unfold interpret
+    simp only [fVars, Finset.mem_erase, ne_eq, and_imp] at h
+    have : ∀ a : α, ∀ j ∈ φ.fVars,
+        (replace s i a) j = (replace t i a) j := by
+      intro a j hj
+      by_cases h' : j = i <;> simp only [replace, h', ↓reduceIte]; exact h j h' hj
+    conv => lhs; intro a; rw [hi _ _ (this a)]
+
+theorem Formula.interpret_replace_invariance
+    (M : Structure L α) {φ : Formula L} (s : Assignment α) (a : α) {i : Idx} :
+    i ∉ φ.fVars -> (φ.interpret M (replace s i a) <-> φ.interpret M s) := by
+  intro hi
+  apply interpret_coincidence M
+  simp only [ite_eq_right_iff]
+  intro j hj h
+  rw [h] at hj
+  exfalso; exact hi hj
+
+/-- Classical needed -/
+theorem Structure.sentence_determinacy (M) (φ : Formula L) : φ.fVars = ∅ ->
+    (∀ s : Assignment α, φ.interpret M s) ∨ (∀ s : Assignment α, ¬ φ.interpret M s) := by
+  intro h0
+  let s0 : Assignment α := fun _ => Inhabited.default (α := α)
+  have := Formula.interpret_coincidence M (φ := φ) s0
+  by_cases h : φ.interpret M s0
+  · left; intro s; exact (this s (by simp [h0])).mp h
+  · right; intro s; exact (Iff.not (this s (by simp [h0]))).mp h
+
+/-- The following two theorems show that the sentence makes no essential difference from
+  unclosed formula in the sense of semantic level, corresponding to the generalizing theorem
+  in the sense of syntax. -/
+theorem Structure.satisfies_gen_elim (M : Structure L α) {Γ} {φ : Formula L} {i : Idx} :
+    M.satisfies Γ (.fall i φ) -> M.satisfies Γ φ := by
+  unfold satisfies
+  intro h s h1
+  rw [←replace_absorb s i]
+  exact (h s h1) (s i)
+
+theorem Structure.satisfies_gen_intro (M : Structure L α) (Γ) (φ : Formula L) (i : Idx) :
+    (∀ g ∈ Γ, i ∉ g.fVars) -> M.satisfies Γ φ -> M.satisfies Γ (.fall i φ) := by
+  intro hg h s h1 a
+  have : ∀ g ∈ Γ, Formula.interpret M (replace s i a) g := by
+    intro g h2
+    have := h1 g h2
+    rw [Formula.interpret_replace_invariance M s a (hg g h2)]
+    exact this
+  exact h (replace s i a) this
+
+theorem Structure.deduction (M : Structure L α) {Γ} (φ ψ : Formula L) :
+    (M.satisfies (Γ.insert φ) ψ) ↔ (M.satisfies Γ (.impl φ ψ)) := by
+  constructor
+  · intro h s g hg
+    have : ∀ g ∈ Set.insert φ Γ, Formula.interpret M s g := by
+      intro x hx
+      simp only [Set.insert, Set.mem_setOf_eq] at hx
+      rcases hx with h1 | h2
+      · rw [h1]; exact hg
+      · exact g x h2
+    exact h s this
+  · intro h s hg
+    simp only [satisfies, Formula.interpret] at h
+    exact h s (fun g h1 => hg g (id (.inr h1))) (hg φ (id (.inl rfl)))
+
+lemma Term.interpret_subst (M : Structure L α) (s) {i ti t} :
+    interpret M s (subst i ti t) = interpret M (replace s i (ti.interpret M s)) t := by
+  induction t with
+  | var j =>
+    simp only [interpret, subst]
+    by_cases h : i = j
+    · simp [h]
+    · simp only [h, interpret, ↓reduceIte, right_eq_ite_iff]; intro h'
+      exfalso; exact h h'.symm
+  | app n args h =>
+    simp only [interpret, subst]
+    conv => lhs; arg 3; intro x; rw [h x]
+
+theorem Formula.interpret_subst (M : Structure L α) (s) {i t φ} (h : FreeFor i t φ) :
+    interpret M s (safeSub i t φ h) <-> interpret M (replace s i (t.interpret M s)) φ := by
+  induction φ generalizing s with
+  | atom n ns =>
+    simp only [interpret, safeSub]
+    conv => lhs; arg 3; intro x; rw [Term.interpret_subst M s]
+  | falsum => simp only [interpret, safeSub]
+  | impl φ ψ h1 h2 => simp only [interpret, safeSub]; rw [h1 s h.left, h2 s h.right]
+  | fall j φ h' =>
+    by_cases hi : i = j
+    · simp only [interpret, safeSub, hi, ↓reduceDIte]
+      conv => rhs; intro a; lhs; rw [replace_idempotent]
+    · simp only [safeSub, hi, ↓reduceDIte, interpret]
+      rcases h with h1 | h2 | h3
+      · exfalso; exact hi h1
+      · conv => rhs; intro a; lhs; rw [replace_comm s i j hi]
+        conv => rhs; intro a; rw [interpret_replace_invariance M _ _ h2]
+        conv =>
+          lhs; intro a; arg 3;
+          rw [subst_invariance (out_var_is_free_for_any_term t h2) h2]
+      · have (a : α) := h' (replace s j a) h3.right
+        conv => lhs; intro a; rw [this a]
+        conv => rhs; intro a; lhs; rw [replace_comm s i j hi]
+        conv =>
+          lhs; intro a; arg 2; arg 3;
+          rw [Term.interpret_replace_invariance M s a h3.left]
+end interpret
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/Proof.lean">
+import PrimaryLogic.Formula
+
+namespace PrimaryLogic
+
+section theory
+variable {LF LP : Type} {L : Lang LF LP} (α : outParam Type) [AxiomSchema L α]
+
+/-- `Proof` type is designed for meta theorem proving, and note that is cannot recall subproofs,
+  yet `ProofTree` retains them.
+`ProofSequence` preorderly traverse the ProofTree, whose theory is not that completed
+  as it hasn't been applied yet.
+
+There are two kinds of mainstream FOL theory.
+  One intro Gen inference rule, the other intro gen as axiom schemas
+  (`.gen` and `.q3` in `FOLAxioms`).
+I prefer the second one, as it is easier to prove certain meta theorems,
+  without annoyance of checking Gen rule in pattern matching.
+Under this circumstance, `.gen` becomes an axiom schema ensuring that an axiom in open formula form
+  is equivalent to its closed form (generalized by universal quantifier),
+  where the former is flexible to write machine proof, while the latter,
+  requiring any axiom to be sentence, guarantees the strictness of traditional logic theory.
+
+- `asp`: assumption
+- `axm`: axiom (schema),
+  I haven't named it "axiom" for the consideration of confiction with Lean4 keyword.
+- `mp`: the unique inference rule
+-/
+inductive Proof (Γ : Set (Formula L)) : Formula L → Prop
+  | asp (φ) : φ ∈ Γ → Proof Γ φ
+  | axm (a : α) : Proof Γ (AxiomSchema.toFormula (L := L) a)
+  | mp {φ ψ : Formula L} : Proof Γ (.impl φ ψ) → Proof Γ φ → Proof Γ ψ
+
+inductive ProofTree (Γ : Set (Formula L)) : Formula L → Type
+  | asp (φ) : φ ∈ Γ → ProofTree Γ φ
+  | axm (a : α) : ProofTree Γ (AxiomSchema.toFormula (L := L) a)
+  | mp {φ ψ : Formula L} : ProofTree Γ (.impl φ ψ) → ProofTree Γ φ → ProofTree Γ ψ
+
+def ProofTree.toProof {Γ} (φ : Formula L) : ProofTree α Γ φ -> Proof α Γ φ
+  | .asp φ h => .asp φ h
+  | .axm a => .axm a
+  | .mp p q => .mp (p.toProof) (q.toProof)
+
+theorem Proof.hasTree {Γ} {φ : Formula L} : Proof α Γ φ -> Nonempty (ProofTree α Γ φ)
+  | asp x h => .intro (.asp x h)
+  | axm a => .intro (.axm a)
+  | mp p1 p2 => match hasTree p1, hasTree p2 with
+    | .intro t1, .intro t2 => .intro (.mp t1 t2)
+
+def ProofTree.vars {Γ} {φ : Formula L} : ProofTree α Γ φ -> Finset Idx
+  | asp .. | axm .. => φ.vars
+  | mp px py => vars px ∪ vars py
+
+variable {c : LF} {s : Finset Idx} (m : Formula.axiomMor L c s)
+
+structure AxiomTransform where
+  transform (a : α) : (AxiomSchema.toFormula (L := L) a).vars ⊆ s -> α
+  invariance (a : α) (h : (AxiomSchema.toFormula (L := L) a).vars ⊆ s) :
+    AxiomSchema.toFormula (L := L) (transform a h) = m.f (AxiomSchema.toFormula (L := L) a)
+
+variable {T : AxiomTransform α m}
+def ProofTree.transform {Γ : Set (Formula L)} {φ : Formula L}
+    (h1 : ∀ ψ ∈ Γ, m.f ψ = ψ) (p : ProofTree α Γ φ) (h2 : p.vars ⊆ s) :
+    ProofTree α Γ (m.f φ) := match p with
+  | .axm a => cast (congrArg (ProofTree α Γ ·) (T.invariance a h2)) <|
+      .axm <| T.transform a h2
+  | .asp ψ h => .asp (m.f ψ) <| (h1 ψ h).symm ▸ h
+  | .mp (φ := x) (ψ := y) px py => .mp
+    (m.map_impl x y ▸ transform h1 px <| Finset.union_subset_left h2)
+    (transform h1 py <| Finset.union_subset_right h2)
+
+section runtime
+
+inductive ProofType : Type
+  | asp : ProofType
+  | axm : α -> ProofType
+  | mp : Nat -> ProofType
+
+abbrev ProofSeq {LF LP : Type} (L : Lang LF LP) (α : outParam Type) :=
+  List ((ProofType α) × (Formula L))
+variable {α : outParam Type} [AxiomSchema L α]
+
+def ProofSeq.check [AxiomSchema L α] (Γ : Set (Formula L)) : ProofSeq L α -> Prop
+  | [(.asp, φ)] => φ ∈ Γ
+  | [(.axm a, φ)] => φ = AxiomSchema.toFormula (L := L) a
+  | (.mp i, φ) :: s =>
+    let s1 := s.take i
+    let s2 := s.drop i
+    check Γ s1 ∧ check Γ s2 ∧ match s1, s2 with
+    | (_, ψ) :: _, (_, χ) :: _ => χ = .impl ψ φ
+    | _, _ => False
+  | _ => False
+termination_by s => s.length
+
+theorem ProofSeq.checked_ne_nil {Γ : Set (Formula L)} {s : ProofSeq L α} :
+    s.check Γ → s ≠ [] := by
+  intro h; by_contra; unfold check at h; rwa [this] at h
+
+def ProofSeq.toTree {Γ} (s : ProofSeq L α) (h : s.check Γ) :
+    ProofTree α Γ (s.head (checked_ne_nil h)).2 :=
+  match hs : s with
+  | [(.asp, φ)] => .asp φ (by unfold check at h; assumption)
+  | [(.axm a, φ)] => by
+    unfold check at h
+    rw [List.head_singleton, h]
+    exact .axm a
+  | (.mp i, φ) :: as => by
+    unfold check at h
+    obtain ⟨h1, h2, h3⟩ := h
+    match h4 : List.take i as, h5 : List.drop i as with
+    | (t1, ψ) :: s1, (t2, χ) :: s2 =>
+      rw [h4, h5] at h3
+      dsimp at h3
+      have h6 := h3 ▸ h5
+      have p1 := toTree ((t1, ψ) :: s1) (h4 ▸ h1)
+      have p2 := toTree ((t2, _) :: s2) (h6 ▸ h2)
+      exact .mp p2 p1
+    | [], [] | [], _ | _ :: _, [] => exfalso; rwa [h4, h5] at h3
+  | [] | (.asp, _) :: _ :: _ | (.axm _, _) :: _ :: _ =>
+    by unfold check at h; contradiction
+termination_by s.length
+decreasing_by
+  open List in
+  constructor
+  · have d1 := congrArg length h5
+    have d2 := congrArg length (take_append_drop i as)
+    rw [length] at d1
+    rw [length_append] at d2
+    rw [←h4, ←d2, d1, ←Nat.add_one]
+    simp [length_take]
+  · rw [←h6, length, length_drop]
+    apply Nat.lt_of_le_of_lt (Nat.sub_le as.length i)
+    exact Nat.lt_add_right_iff_pos.mpr (by decide)
+
+def ProofTree.toSeq {Γ} {φ : Formula L} : ProofTree α Γ φ -> ProofSeq (L := L) α
+  | asp x _ => [(.asp, x)]
+  | axm a => [(.axm a, AxiomSchema.toFormula a)]
+  | mp (ψ := y) p1 p2 =>
+    let s := p2.toSeq
+    (.mp s.length, y) :: s ++ p1.toSeq
+
+open ProofSeq in
+theorem ProofTree.toSeq_checked {Γ} {φ : Formula L} (p : ProofTree α Γ φ) :
+    ∃ h : p.toSeq.check Γ, (p.toSeq.head (checked_ne_nil h)).2 = φ := by
+  induction hp : p with
+  | asp x h1 =>
+    unfold toSeq check; use h1; eq_refl
+  | axm a =>
+    unfold toSeq check; use rfl; eq_refl
+  | @mp x y px py hx hy =>
+    obtain ⟨h1, h2⟩ := hx px rfl
+    obtain ⟨h3, h4⟩ := hy py rfl
+    refine ⟨?_, rfl⟩
+    unfold toSeq check
+    dsimp
+    open List in
+    rw [take_append, drop_append, Nat.sub_self, take_zero, drop_zero,
+      take_of_length_le (Nat.le_refl _), drop_of_length_le (Nat.le_refl _), append_nil, nil_append]
+    refine ⟨h3, h1, ?_⟩
+    match h5 : py.toSeq, h6 : px.toSeq with
+    | (_, ψ) :: _, (_, χ) :: _ =>
+      conv at h2 => enter [1, 1, 1]; rw [h6]
+      conv at h4 => enter [1, 1, 1]; rw [h5]
+      dsimp at *
+      rwa [←h4] at h2
+    | [], _  => rw [h5] at h3; unfold check at h3; contradiction
+    | _, [] => rw [h6] at h1; unfold check at h1; contradiction
+
+def ProofSeq.allVars (σ : ProofSeq L α) : Finset Idx :=
+  (σ.map (·.2.vars) |> List.toFinset).biUnion id
+
+lemma ProofSeq.fresh_not_mem_vars {α : Type} (σ : ProofSeq L α) :
+    ∀ k : Fin σ.length, Freshable.fresh σ.allVars ∉ σ[k].2.vars := by
+  intro n
+  suffices h : σ[n].2.vars ⊆ σ.allVars by
+    apply Finset.not_mem_subset h
+    apply Freshable.fresh_is_new
+  dsimp only [allVars]
+  intro k h
+  simp only [Finset.mem_biUnion, List.mem_toFinset, id]
+  use σ[n].2.vars
+  constructor
+  · rw [List.mem_map]; use σ[n]
+    exact ⟨List.getElem_mem n.prop, rfl⟩
+  · exact h
+
+end runtime
+
+def Inconsistent (Γ : Set (Formula L)) : Prop := Proof α Γ .falsum
+abbrev Consistent (Γ : Set (Formula L)) : Prop := ¬ Inconsistent α Γ
+
+theorem Proof.monotone {Γ Δ} {φ : Formula L} :
+  Γ ⊆ Δ -> Proof α Γ φ -> Proof α Δ φ := fun h p =>
+  match p with
+  | asp ψ hi => asp ψ (h hi)
+  | axm a => axm a
+  | mp p1 p2 => mp (p1.monotone h) (p2.monotone h)
+
+def Theory (L : Lang LF LP) := Set (Sentence L)
+
+end theory
+
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/Tool.lean">
+import Mathlib.Data.Finset.Basic
+import Mathlib.Data.Finset.Sort
+import Mathlib.Data.Nat.Find
+
+namespace PrimaryLogic
+
+section forall_in
+
+def forallInRange (m n : Nat) (p : Nat → Bool) : Bool :=
+  if h : m < n then
+    p m && forallInRange (m + 1) n p
+  else true
+termination_by n - m
+
+def forallInFin (n : Nat) (p : Fin n → Bool) (m : Nat := 0) : Bool :=
+  if h : m < n then
+    p ⟨m, h⟩ && forallInFin n p (m + 1)
+  else true
+termination_by n - m
+
+lemma forall_range_eq_fin (m n : Nat) (p : Nat → Bool) (q : Fin n → Bool) :
+    (∀ i : Nat, (h : i < n) → i ≥ m → p i = q ⟨i, h⟩) →
+    forallInRange m n p = forallInFin n q m := by
+  intro h
+  induction h0 : n - m generalizing m with
+  | zero =>
+    unfold forallInRange forallInFin
+    split_ifs
+    · have := Nat.not_lt_of_ge (Nat.sub_eq_zero_iff_le.mp h0)
+      contradiction
+    · eq_refl
+  | succ d hd =>
+    unfold forallInRange forallInFin
+    split_ifs with h1
+    · have h2 (i : Nat) (hm : i ≥ m + 1) := Nat.le_trans (Nat.le_add_right m 1) hm
+      rw [hd (m + 1) (fun i hi hm => h i hi (h2 i hm)) (by omega)]
+      rw [h m h1 (Nat.le_refl m)]
+    · eq_refl
+
+theorem forallInRange_eq (i n : Nat) (p : Nat → Bool) :
+    forallInRange i n p = true ↔ ∀ j : Nat, j < n → j ≥ i → p j := by
+  constructor
+  · intro h j hn hi
+    revert h p
+    induction h0 : n - i generalizing i with
+    | zero =>
+      have := Nat.not_lt_of_ge (Nat.sub_eq_zero_iff_le.mp h0)
+      have := Nat.lt_of_le_of_lt (ge_iff_le.mp hi) hn
+      contradiction
+    | succ d hd =>
+      intros p h
+      by_cases h1 : j = i
+      · rw [h1]
+        have h2 : i < n := by omega
+        unfold forallInRange at h
+        split_ifs at h
+        exact Bool.and_elim_left h
+      · apply hd (i + 1) (by omega) (by omega) p
+        unfold forallInRange at h
+        split_ifs at h with h2
+        · exact Bool.and_elim_right h
+        · have : i < n := by omega
+          contradiction
+  · intro h
+    induction h0 : n - i generalizing i with
+    | zero =>
+      unfold forallInRange
+      split_ifs with h1
+      · have := Nat.not_lt_of_ge (Nat.sub_eq_zero_iff_le.mp h0)
+        contradiction
+      · eq_refl
+    | succ d hd =>
+      have h1 : i < n := by omega
+      unfold forallInRange
+      split_ifs
+      rw [Bool.and_eq_true_iff]
+      constructor
+      · exact h i h1 (Nat.le_refl i)
+      · apply hd (i + 1)
+        · intro j hj hi
+          exact h j hj (by omega)
+        · omega
+
+theorem forallInFin_eq (n : Nat) (p : Fin n → Bool) :
+    forallInFin n p = true ↔ ∀ i : Fin n, p i := by
+  let s (i : Nat) := if h : i < n then p ⟨i, h⟩ else true
+  have h1 := forallInRange_eq 0 n s
+  have h2 : ∀ (i : ℕ) (h : i < n), i ≥ 0 → s i = p ⟨i, h⟩ := by
+    intros; unfold s; split_ifs; eq_refl
+  have h3 := forall_range_eq_fin 0 n s p h2
+  rw [←h3, h1]
+  constructor
+  · intro h i
+    have h4 := h i.val i.isLt (Nat.zero_le i)
+    unfold s at h4
+    split_ifs at h4 with h5
+    · exact h4
+    · exfalso; exact h5 i.isLt
+  · intro h i h4 _
+    unfold s
+    split_ifs
+    exact h ⟨i, h4⟩
+
+end forall_in
+
+abbrev Idx := Nat -- Planed to be replaced with type argument.
+
+section assignment
+
+abbrev Assignment (α : Type*) := Idx -> α
+
+variable {α : Type u} (s : Assignment α)
+
+abbrev replace (i : Idx) (a : α) :=
+  fun k => if k = i then a else s k
+
+lemma replace_absorb (i : Idx) : replace s i (s i) = s := by grind
+
+lemma replace_comm (i j : Idx) (h : i ≠ j) (a b : α) :
+    replace (replace s i a) j b = replace (replace s j b) i a := by grind
+
+lemma replace_idempotent (i : Idx) (a b : α) :
+    replace (replace s i a) i b = replace s i b := by grind
+
+end assignment
+
+section freshable
+class Freshable (α : Type*) [DecidableEq α] where
+  fresh : Finset α → α
+  fresh_is_new : ∀ s : Finset α, fresh s ∉ s
+
+/-- `fresh` algorithm was originally implemented by `Finset.max` function,
+    without optimal utilization of space, then `Nat.find` was selected instead.
+  Not sure the time efficiency of the latter though.
+  Yet both the time and space optimal algorithm will be explored in another file. -/
+instance : Freshable Idx where
+  fresh := fun s => Nat.find (p := (· ∉ s)) (by
+    cases h : s.max with
+    | bot => simp [Finset.max_eq_bot.mp h]
+    | coe m =>
+      use m + 1
+      exact Finset.notMem_of_max_lt (a := m+1) (b := m) (by simp) h
+  )
+  fresh_is_new s := Nat.find_spec (p := fun i => i ∉ s) _
+end freshable
+end PrimaryLogic
+</file>
+
+<file path="PrimaryLogic/Vars.lean">
+import PrimaryLogic.Formula
+
+namespace PrimaryLogic
+variable {LF LP : Type} {L : Lang LF LP}
+
+lemma Formula.bVars_subset_vars : (φ : Formula L) -> φ.bVars ⊆ φ.vars
+  | atom .. | falsum => Finset.empty_subset _
+  | impl φ ψ => by
+    unfold bVars vars
+    apply Finset.union_subset_union
+    · exact Formula.bVars_subset_vars φ
+    · exact Formula.bVars_subset_vars ψ
+  | fall i φ => by
+    unfold bVars vars
+    apply Finset.insert_subset_insert
+    exact Formula.bVars_subset_vars φ
+
+lemma Formula.fVars_subset_vars (φ : Formula L) : φ.fVars ⊆ φ.vars := by
+  induction φ with
+  | atom n args | falsum => simp only [fVars, vars, subset_refl]
+  | impl x y hx hy => simp only [fVars, vars]; exact Finset.union_subset_union hx hy
+  | fall i x h =>
+    simp only [fVars, vars]
+    calc x.fVars.erase i
+      _ ⊆ x.fVars := Finset.erase_subset ..
+      _ ⊆ x.vars := h
+      _ ⊆ insert i x.vars := Finset.subset_insert ..
+
+lemma Formula.term_FreeFor (i : Idx) (t : Term L) (φ : Formula L) (h : t.vars ∩ φ.vars = ∅) :
+    FreeFor i t φ := by
+  open Finset in
+  induction φ with
+  | atom | falsum => trivial
+  | impl x y hx hy =>
+    unfold FreeFor
+    unfold vars at h
+    rw [inter_union_distrib_left, union_eq_empty] at h
+    exact ⟨hx h.left, hy h.right⟩
+  | fall j ψ h' =>
+    unfold FreeFor
+    unfold vars at h
+    rw [insert_eq, inter_union_distrib_left, union_eq_empty, inter_singleton] at h
+    split_ifs at h with h1
+    · exfalso; exact singleton_ne_empty j h.left
+    · right; right; exact ⟨h1, h' h.right⟩
+
+lemma Term.const_vars_empty (t : Term L) : t.isConst -> t.vars = ∅ := by
+  intro h; cases t with
+  | var i => dsimp [isConst] at h
+  | app f s =>
+    rw [Finset.eq_empty_iff_forall_notMem]
+    intro i; unfold vars
+    simp only [Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists]
+    intro x
+    rw [h] at x
+    exact Fin.elim0 x
+
+theorem Formula.const_FreeFor (i : Idx) (φ : Formula L) (t : Term L) :
+    t.isConst -> FreeFor i t φ := fun h =>
+  term_FreeFor i t φ <| by rw [Term.const_vars_empty t h, Finset.empty_inter]
+
+lemma Formula.fVar_refl (i : Idx) (φ : Formula L) : φ.FreeFor i (.var i) := by
+  induction φ with
+  | atom | falsum => trivial
+  | impl x y hx hy => exact ⟨hx, hy⟩
+  | fall j x h =>
+    unfold FreeFor
+    by_cases h' : i = j
+    · left; exact h'
+    · right; right
+      constructor
+      · unfold Term.vars
+        rw [Finset.mem_singleton]
+        rwa [eq_comm] at h'
+      · exact h
+
+@[simp]
+theorem Formula.safe_subst_equiv (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t) :
+    φ.subst i t = φ.safeSub i t h := by
+  induction φ with
+  | atom n args | falsum => simp only [subst, safeSub]
+  | impl x y hx hy => simp only [subst, safeSub, impl.injEq]; exact ⟨hx h.left, hy h.right⟩
+  | fall j x h' =>
+    simp only [subst, safeSub]
+    by_cases hi : i = j <;>
+      simp only [hi, ↓reduceIte, ↓reduceDIte, fall.injEq, true_and];
+      simp only [FreeFor] at h;
+      apply h'
+
+lemma Term.subst_self (i : Idx) (t : Term L) :
+    Term.subst i (.var i) t = t := by
+  induction t with
+  | var j => simp [subst]
+  | app n a h =>
+    simp only [subst, app.injEq, heq_eq_eq, true_and]
+    funext x
+    exact h x
+
+theorem Formula.subst_self (i : Idx) (φ : Formula L)
+    (h : φ.FreeFor i (.var i)) : φ.safeSub i (.var i) h = φ := by
+  induction φ with
+  | atom n a =>
+    simp only [safeSub, atom.injEq, heq_eq_eq, true_and]
+    funext x
+    exact Term.subst_self i (a x)
+  | falsum => unfold safeSub; eq_refl
+  | impl x y hx hy =>
+    unfold safeSub;
+    unfold FreeFor at h
+    rw [hx h.left]
+    rw [hy h.right]
+  | fall j ψ h' =>
+    simp only [safeSub, dite_eq_left_iff, fall.injEq, true_and]
+    by_cases hi : i = j
+    · intro hi; contradiction
+    · intro _;
+      unfold FreeFor at h
+      rcases h with h1 | h2 | h3
+      · exfalso; exact hi h1
+      · exact h' (out_var_is_free_for_any_term (.var i) h2)
+      · exact h' h3.right
+
+lemma Term.subst_invariance (i : Idx) (t s : Term L) :
+  i ∉ s.vars -> t.subst i s = s := by
+  intro h
+  induction s with
+  | var j =>
+    simp [vars] at h
+    simp [subst, h]
+  | app n args h' =>
+    simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists] at h
+    simp only [subst, app.injEq, heq_eq_eq, true_and]
+    funext x
+    exact h' x (h x)
+
+theorem Formula.subst_invariance {i : Idx} {t : Term L} {φ : Formula L} (h : φ.FreeFor i t) :
+    i ∉ φ.fVars -> φ.safeSub i t h = φ := by
+  intro hi
+  induction φ with
+  | atom n args =>
+    simp only [safeSub, atom.injEq, heq_eq_eq, true_and]
+    simp only [fVars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists] at hi
+    funext x
+    exact Term.subst_invariance i t (args x) (hi x)
+  | falsum => dsimp only [safeSub]
+  | impl x y hx hy =>
+    simp only [safeSub, impl.injEq]
+    simp only [fVars, Finset.mem_union, not_or] at hi
+    dsimp only [FreeFor] at h
+    exact ⟨hx h.left hi.left, hy h.right hi.right⟩
+  | fall j x hx =>
+    simp only [safeSub, dite_eq_left_iff, fall.injEq, true_and]
+    simp only [fVars, Finset.mem_erase, ne_eq, not_and] at hi
+    by_cases h' : i = j
+    · intro h1; exfalso; exact h1 h'
+    · intro _; apply hx; exact hi h'
+
+lemma Term.subst_circulation (i j : Idx) (t : Term L) (hj : j ∉ t.vars) :
+    subst j (.var i) (subst i (.var j) t) = t := by
+  induction t with
+  | var k =>
+    dsimp only [subst]
+    simp only [vars, Finset.notMem_singleton] at hj
+    split_ifs with h
+    · simp only [subst, ↓reduceIte, var.injEq]; exact h
+    · simp only [subst, ite_eq_right_iff, var.injEq]
+      intro hk; exfalso; exact hj hk
+  | app n s h =>
+    simp only [subst, app.injEq, heq_eq_eq, true_and]
+    simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists] at hj
+    funext k; apply h; apply hj
+
+theorem Formula.subst_circulation (i j : Idx) (φ : Formula L) (hj : j ∉ φ.vars) :
+    let ψ := safeSub i (.var j) φ <| term_FreeFor i (.var j) φ
+      (by rw [Finset.inter_comm]; exact Finset.inter_singleton_of_notMem hj)
+    ∃ h : FreeFor j (.var i) ψ, safeSub j (.var i) ψ h = φ := by
+  induction φ with
+  | atom n s =>
+    use True.intro
+    simp only [safeSub, atom.injEq, heq_eq_eq, true_and]
+    simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists] at hj
+    funext k
+    exact Term.subst_circulation i j _ (hj _)
+  | falsum => use True.intro; dsimp [safeSub]
+  | impl x y hx hy =>
+    simp only [vars, Finset.mem_union, not_or] at hj
+    dsimp only [safeSub]
+    obtain ⟨hx1, hx2⟩ := hx hj.left
+    obtain ⟨hy1, hy2⟩ := hy hj.right
+    use ⟨hx1, hy1⟩
+    congr
+  | fall k x h =>
+    simp only [vars, Finset.mem_insert, not_or] at hj
+    have h' := Finset.notMem_mono (fVars_subset_vars _) hj.right
+    dsimp only [safeSub]
+    split_ifs with hi
+    · simp only [FreeFor, Term.vars, Finset.mem_singleton]
+      refine ⟨?_, ?_⟩
+      · right; left; exact h'
+      · dsimp [safeSub]
+        split_ifs with hk
+        · exfalso; exact hj.left hk
+        · congr; exact subst_invariance _ h'
+    · simp only [FreeFor, Term.vars, Finset.mem_singleton]
+      obtain ⟨h1, h2⟩ := h hj.right
+      refine ⟨?_, ?_⟩
+      · right; right; exact ⟨ne_comm.mp hi, h1⟩
+      · dsimp [safeSub]
+        split_ifs with hk
+        · exfalso; exact hj.left hk
+        · rw [fall.injEq]; exact ⟨rfl, h2⟩
+
+theorem Formula.loose_FreeFor (i : Idx) (t : Term L) (φ : Formula L) :
+    FreeFor i t (φ.loose t i) := by
+  induction φ with
+  | atom | falsum => trivial
+  | impl x y hx hy => unfold loose FreeFor; exact ⟨hx, hy⟩
+  | fall j x h =>
+    unfold loose FreeFor
+    right; right; constructor
+    · have : t.vars ⊆ insert i ((loose t i x).vars ∪ t.vars) :=
+        subset_trans (Finset.subset_union_right ..) (Finset.subset_insert ..)
+      exact Finset.not_mem_subset this <| Freshable.fresh_is_new _
+    · sorry
+
+section substFun
+variable [DecidableEq LF]
+
+theorem Term.fun_var_subst_distrib (i : Idx) (f : LF) (ir fr tr : Term L) : i ∉ fr.vars →
+    substFun fr f (subst i ir tr) = subst i (substFun fr f ir) (substFun fr f tr) := by
+  intro h0
+  induction tr with
+  | var j =>
+    by_cases h : i = j <;> simp only [subst, h, substFun, ite_cond_eq_true, ite_cond_eq_false]
+  | app g s h =>
+    by_cases h1 : g = f
+    · simp only [subst, substFun, h1, ite_cond_eq_true]
+      apply symm
+      exact Term.subst_invariance i _ fr h0
+    · simp only [subst, substFun, h1, ite_cond_eq_false, app.injEq, heq_eq_eq, true_and]
+      funext k; exact h k
+
+lemma Term.substFun_not_mem_fVars {i : Idx} {f : LF} {fr tr : Term L} :
+    i ∉ fr.vars → i ∉ tr.vars → i ∉ (substFun fr f tr).vars := by
+  intro h0 h1
+  induction tr with
+  | var j =>
+    dsimp only [vars] at h1
+    dsimp only [substFun, vars]
+    exact h1
+  | app g s h =>
+    simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists] at h1
+    dsimp only [substFun]
+    split_ifs with h2
+    · exact h0
+    · simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists]
+      intro x; exact h x <| h1 x
+
+lemma Formula.substFun_not_mem_fVars {i : Idx} {f : LF} {fr : Term L} {φ : Formula L} :
+    i ∉ fr.vars → i ∉ φ.fVars → i ∉ (substFun fr f φ).fVars := by
+  intro h0 h1
+  induction φ with
+  | atom n p =>
+    simp only [substFun, fVars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists]
+    simp only [fVars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists] at h1
+    intro x; exact Term.substFun_not_mem_fVars h0 (h1 x)
+  | falsum => dsimp only [substFun, fVars, Finset.notMem_empty]; trivial
+  | impl x y hx hy =>
+    simp only [substFun, fVars, Finset.mem_union, not_or]
+    simp only [fVars, Finset.mem_union, not_or] at h1
+    exact ⟨hx h1.left, hy h1.right⟩
+  | fall j x h' =>
+    simp only [substFun, fVars, Finset.mem_erase, not_and]
+    simp only [fVars, Finset.mem_erase, not_and] at h1
+    intro h; exact h' (h1 h)
+
+lemma Formula.substFun_FreeFor {i : Idx} {f : LF} {ir fr : Term L} {φ : Formula L}
+    (hi : FreeFor i ir φ) (h : i ∉ fr.vars) (hb : fr.vars ∩ φ.bVars = ∅) :
+      FreeFor i (Term.substFun fr f ir) (Formula.substFun fr f φ) := by
+  induction φ with
+  | atom p s | falsum => dsimp only [Formula.substFun, FreeFor]
+  | impl x y hx hy =>
+    dsimp only [Formula.substFun, FreeFor]
+    have ⟨h1, h2⟩ := hi
+    simp only [bVars, Finset.inter_union_distrib_left, Finset.union_eq_empty] at hb
+    exact ⟨hx h1 hb.left, hy h2 hb.right⟩
+  | fall j x h' =>
+    dsimp only [Formula.substFun, FreeFor]
+    dsimp [FreeFor] at hi
+    rcases hi with h1 | h2 | ⟨h3, h4⟩
+    · left; exact h1
+    · right; left; exact Formula.substFun_not_mem_fVars h h2
+    · right; right; constructor
+      · refine Term.substFun_not_mem_fVars ?_ h3
+        unfold bVars at hb
+        by_contra
+        have h5 := Finset.mem_insert_self j x.bVars
+        have h6 := hb ▸ Finset.mem_inter.mpr ⟨this, h5⟩
+        have h7 := Finset.notMem_empty j
+        contradiction
+      · simp only [bVars, Finset.insert_inter] at hb
+        split_ifs at hb with h5
+        · exfalso; simp only [Finset.insert_ne_empty] at hb
+        · exact h' h4 hb
+
+theorem Formula.fun_var_subst_distrib (i : Idx) (f : LF) (ir fr : Term L) (φ : Formula L)
+    (h : FreeFor i ir φ) (h1 : i ∉ fr.vars) (hb : fr.vars ∩ φ.bVars = ∅) :
+    Formula.substFun fr f (safeSub i ir φ h) =
+      safeSub i (Term.substFun fr f ir) (Formula.substFun fr f φ) (substFun_FreeFor h h1 hb) := by
+  induction φ with
+  | atom p s =>
+    simp only [safeSub, substFun, atom.injEq, heq_eq_eq, true_and]
+    funext k; apply Term.fun_var_subst_distrib; exact h1
+  | falsum => dsimp only [safeSub, substFun]
+  | impl x y hx hy =>
+    simp only [safeSub, substFun, impl.injEq]
+    simp only [bVars, Finset.inter_union_distrib_left, Finset.union_eq_empty] at hb
+    exact ⟨hx _ hb.left, hy _ hb.right⟩
+  | fall j x h' =>
+    dsimp only [safeSub, substFun]
+    split_ifs with h1
+    · rw [←h1]; dsimp only [substFun]
+    · simp only [substFun, fall.injEq, true_and]
+      simp only [FreeFor, h1, false_or] at h
+      simp only [bVars, Finset.insert_inter] at hb
+      split_ifs at hb with h5
+      · exfalso; simp only [Finset.insert_ne_empty] at hb
+      · rcases h with h2 | h3
+        · have := out_var_is_free_for_any_term ir h2
+          exact h' this hb
+        · exact h' h3.right hb
+
+open Finset in
+def Formula.substFunMor (c : LF) (y : Term L) (s : Finset Idx) (h : y.vars ∩ s = ∅) :
+    axiomMor (L := L) c s where
+  τ := Term.substFun y c
+  f := Formula.substFun y c
+  map_falsum := rfl
+  map_impl := fun _ _ => rfl
+  map_fall := fun _ _ => rfl
+  free_var := fun {i φ} h0 h1 h2 => by
+    have : ∀ t : Term L, i ∉ t.vars → t.vars ⊆ s → i ∉ (Term.substFun y c t).vars :=
+      fun t h3 h4 => by induction t with
+      | var j => unfold Term.substFun; exact h3
+      | app g as h5 =>
+        unfold Term.substFun
+        split_ifs
+        · by_contra
+          apply Finset.notMem_empty i
+          exact h ▸ Finset.mem_inter_of_mem this h1
+        · simp only [Term.vars, mem_biUnion, mem_univ, true_and, not_exists] at h3 ⊢
+          simp only [Term.vars, biUnion_subset_iff_forall_subset, mem_univ, true_imp_iff] at h4
+          intro x; exact h5 x (h3 x) (h4 x)
+    induction φ with
+    | atom p as =>
+      simp only [vars, biUnion_subset_iff_forall_subset, mem_univ, true_imp_iff] at h2
+      simp only [substFun, fVars, mem_biUnion, mem_univ, not_exists,
+        not_and, true_imp_iff] at h0 ⊢
+      intro x; exact this (as x) (h0 x) (h2 x)
+    | falsum => unfold substFun fVars; exact notMem_empty i
+    | impl x z hx hz =>
+      unfold fVars at h0; unfold vars at h2
+      unfold substFun fVars
+      rw [union_subset_iff] at h2
+      rw [notMem_union] at h0 ⊢
+      exact ⟨hx h0.left h2.left, hz h0.right h2.right⟩
+    | fall j x hx =>
+      simp only [substFun, fVars, mem_erase, not_and]
+      simp only [fVars, mem_erase, not_and] at h0
+      simp only [vars, insert_subset_iff] at h2
+      intro h3; exact hx (h0 h3) h2.right
+  free_for := fun {i t φ} h0 h1 h2 => by
+    apply substFun_FreeFor h0
+    · by_contra
+      apply notMem_empty i
+      exact h ▸ mem_inter_of_mem this h1
+    · apply subset_empty.mp
+      exact h ▸ inter_subset_inter_left h2
+  subst_comm := fun {i t φ} h0 h1 h2 => by
+    apply Formula.fun_var_subst_distrib
+    · by_contra
+      apply notMem_empty i
+      exact h ▸ mem_inter_of_mem this h1
+    · apply subset_empty.mp
+      exact h ▸ inter_subset_inter_left h2
+end substFun
+
+section close_formula
+
+/-- Failed to apply `Finset.toList` for the sake of its noncomputable def,
+  so that `Finset.sort` was used instead.
+It takes me quite a while to complete the proof of `close_success` theorem,
+  which seemes obvious for human but actually rather complicated to prove in Lean4.
+There might be simpler proof, but anyway, it doesn't matter.
+Honestly speaking, this section is bad implemented, as `Idx` becomes depending on `Nat` property,
+  but I cannot come up with an easier way.
+Generalized scheme that suits for other Idx type would make the proof more complicated,
+  and I have to spend more time on the index handling, which is not the main topic of this project,
+  at least for now.
+However, the generalization of `Idx` type might not be impossible.
+Seeming dependency on `Nat` property in the following proof only involves the order relation,
+  which can be defined as any other sorts of relations.
+For example, lexicographical order can be applied in `String` type,
+  so that `Formula.close` is still valid with `String` as `Idx`.
+Therefore, the above issues doesn't constitute fundamental difficulties,
+  yet the key is the order decidability
+  (it can be implemented in arbitrary form without the concern of its actual meaning),
+  which cannot be bypassed by any other type of `close` algorithm.
+-/
+lemma first_element_from_sorted_set_is_outside (set : Finset Nat) (i : Nat)
+    (s : List Nat) (h : i :: s = set.sort) : i ∉ s := by
+  have hn : (set.sort (· ≤ ·)).Nodup := Finset.sort_nodup ..
+  rw [←h] at hn
+  simp at hn
+  exact hn.left
+
+lemma Formula.quantifier_extract_free_var (i : Idx) (s : List Idx) (h : i ∉ s) (φ : Formula L) :
+    (List.foldr fall (fall i φ) s).fVars = (fall i (List.foldr fall φ s)).fVars := by
+  unfold List.foldr
+  induction s with
+  | nil => eq_refl
+  | cons j s hi =>
+    dsimp only [fVars]
+    simp at h
+    cases s with
+    | nil =>
+      unfold List.foldr
+      exact Finset.erase_right_comm
+    | cons k _ =>
+      have := hi h.right
+      simp only [fVars] at this
+      unfold List.foldr
+      rw [Finset.erase_right_comm]
+      congr
+
+lemma sort_insert_cons_head_min (w : Finset Nat) (i : Nat) (s : List Nat)
+    (h : i :: s = (insert i w).sort) : ∀ j ∈ w, i ≤ j := by
+  intro j hj
+  have h' : j ∈ insert i w := Finset.mem_of_subset (Finset.subset_insert ..) hj
+  replace h' := (Finset.mem_sort (· ≤ ·)).mpr h'
+  have h0 := Finset.pairwise_sort (insert i w) (· ≤ ·)
+  rw [←h] at h0
+  simp at h0
+  rw [←h, List.mem_cons] at h'
+  rcases h' with h1 | h2
+  · rw [h1]
+  · exact h0.left j h2
+
+lemma Formula.foldr_forall_free_vars_down_to_nil (φ : Formula L) (s : List Idx)
+    (h : s = φ.fVars.sort) : (s.foldr fall φ).fVars.sort = [] := by
+  induction s generalizing φ with
+  | nil => unfold List.foldr; exact h.symm
+  | cons i s his =>
+    unfold List.foldr
+    let w := φ.fVars
+    have : s = (fall i φ).fVars.sort := by
+      unfold fVars
+      have hi : i ∈ w := by
+        rw [←Finset.mem_sort (· ≤ ·), ←h, List.mem_cons]
+        left; eq_refl
+      have h' : i :: s = (insert i (w.erase i)).sort := by
+        rw [Finset.insert_erase hi, ←h]
+      have := sort_insert_cons_head_min (w.erase i) i s h'
+      rw [Finset.sort_insert (· ≤ ·) this (Finset.notMem_erase i w)] at h'
+      simp only [List.cons.injEq, true_and] at h'
+      exact h'
+    have h0 := his (.fall i φ) this
+    have : i ∉ s := first_element_from_sorted_set_is_outside w _ _ h
+    replace := quantifier_extract_free_var i s this φ
+    rwa [this] at h0
+
+theorem Formula.close_success (φ : Formula L) : φ.close.fVars = ∅ := by
+  unfold close
+  have := foldr_forall_free_vars_down_to_nil φ φ.fVars.sort rfl
+  replace := congr_arg List.toFinset this
+  rwa [Finset.sort_toFinset _ (· ≤ ·), List.toFinset_nil] at this
+
+def Formula.toSentence (φ : Formula L) : Sentence L := ⟨φ.close, close_success φ⟩
+
+end close_formula
+
+end PrimaryLogic
+</file>
+
+<file path=".gitignore">
+/.lake
+</file>
+
+<file path="lake-manifest.json">
+{"version": "1.1.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "https://github.com/leanprover-community/mathlib4",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover-community",
+   "rev": "5e932f97dd25535344f80f9dd8da3aab83df0fe6",
+   "name": "mathlib",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "v4.29.1",
+   "inherited": false,
+   "configFile": "lakefile.lean"},
+  {"url": "https://github.com/leanprover-community/plausible",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover-community",
+   "rev": "83e90935a17ca19ebe4b7893c7f7066e266f50d3",
+   "name": "plausible",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "main",
+   "inherited": true,
+   "configFile": "lakefile.toml"},
+  {"url": "https://github.com/leanprover-community/LeanSearchClient",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover-community",
+   "rev": "c5d5b8fe6e5158def25cd28eb94e4141ad97c843",
+   "name": "LeanSearchClient",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "main",
+   "inherited": true,
+   "configFile": "lakefile.toml"},
+  {"url": "https://github.com/leanprover-community/import-graph",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover-community",
+   "rev": "48d5698bc464786347c1b0d859b18f938420f060",
+   "name": "importGraph",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "main",
+   "inherited": true,
+   "configFile": "lakefile.toml"},
+  {"url": "https://github.com/leanprover-community/ProofWidgets4",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover-community",
+   "rev": "4dd0959c44d1af0462bd604d0f87c5781307d709",
+   "name": "proofwidgets",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "v0.0.95+lean-v4.29.1",
+   "inherited": true,
+   "configFile": "lakefile.lean"},
+  {"url": "https://github.com/leanprover-community/aesop",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover-community",
+   "rev": "7152850e7b216a0d409701617721b6e469d34bf6",
+   "name": "aesop",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "master",
+   "inherited": true,
+   "configFile": "lakefile.toml"},
+  {"url": "https://github.com/leanprover-community/quote4",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover-community",
+   "rev": "707efb56d0696634e9e965523a1bbe9ac6ce141d",
+   "name": "Qq",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "master",
+   "inherited": true,
+   "configFile": "lakefile.toml"},
+  {"url": "https://github.com/leanprover-community/batteries",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover-community",
+   "rev": "756e3321fd3b02a85ffda19fef789916223e578c",
+   "name": "batteries",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "main",
+   "inherited": true,
+   "configFile": "lakefile.toml"},
+  {"url": "https://github.com/leanprover/lean4-cli",
+   "type": "git",
+   "subDir": null,
+   "scope": "leanprover",
+   "rev": "7802da01beb530bf051ab657443f9cd9bc3e1a29",
+   "name": "Cli",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "v4.29.0",
+   "inherited": true,
+   "configFile": "lakefile.toml"}],
+ "name": "PrimaryLogic",
+ "lakeDir": ".lake"}
+</file>
+
+<file path="lakefile.toml">
+name = "PrimaryLogic"
+version = "0.1.0"
+keywords = ["math"]
+defaultTargets = ["PrimaryLogic"]
+
+[leanOptions]
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+relaxedAutoImplicit = false
+weak.linter.mathlibStandardSet = true
+maxSynthPendingDepth = 3
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.29.1"
+
+[[lean_lib]]
+name = "PrimaryLogic"
+</file>
+
+<file path="lean-toolchain">
+leanprover/lean4:v4.29.1
+</file>
+
+<file path="PrimaryLogic.lean">
+
+</file>
+
+<file path="README.md">
+# PrimaryLogic
+
+A practice oriented project.
+</file>
+
+</files>
