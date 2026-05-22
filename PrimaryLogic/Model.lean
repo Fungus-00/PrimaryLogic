@@ -178,25 +178,25 @@ lemma Term.interpret_subst (M : Structure L α) (s) {i ti t} :
     conv => lhs; arg 3; intro x; rw [h x]
 
 theorem Formula.interpret_subst (M : Structure L α) (s) {i t φ} (h : FreeFor i t φ) :
-    interpret M s (safeSub i t φ h) <-> interpret M (replace s i (t.interpret M s)) φ := by
+    interpret M s (subst i t φ h) <-> interpret M (replace s i (t.interpret M s)) φ := by
   induction φ generalizing s with
   | atom n ns =>
-    simp only [interpret, safeSub]
+    simp only [interpret, subst]
     conv => lhs; arg 3; intro x; rw [Term.interpret_subst M s]
-  | falsum => simp only [interpret, safeSub]
-  | impl φ ψ h1 h2 => simp only [interpret, safeSub]; rw [h1 s h.left, h2 s h.right]
+  | falsum => simp only [interpret, subst]
+  | impl φ ψ h1 h2 => simp only [interpret, subst]; rw [h1 s h.left, h2 s h.right]
   | fall j φ h' =>
     by_cases hi : i = j
-    · simp only [interpret, safeSub, hi, ↓reduceDIte]
+    · simp only [interpret, subst, hi, ↓reduceDIte]
       conv => rhs; intro a; lhs; rw [replace_idempotent]
-    · simp only [safeSub, hi, ↓reduceDIte, interpret]
+    · simp only [subst, hi, ↓reduceDIte, interpret]
       rcases h with h1 | h2 | h3
       · exfalso; exact hi h1
       · conv => rhs; intro a; lhs; rw [replace_comm s i j hi]
         conv => rhs; intro a; rw [interpret_replace_invariance M _ _ h2]
         conv =>
           lhs; intro a; arg 3;
-          rw [subst_invariance (out_var_is_free_for_any_term t h2) h2]
+          rw [subst_invariance (out_var_FreeFor_term t h2) h2]
       · have (a : α) := h' (replace s j a) h3.right
         conv => lhs; intro a; rw [this a]
         conv => rhs; intro a; lhs; rw [replace_comm s i j hi]

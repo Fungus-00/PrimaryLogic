@@ -74,19 +74,6 @@ lemma Formula.fVar_refl (i : Idx) (φ : Formula L) : φ.FreeFor i (.var i) := by
         rwa [eq_comm] at h'
       · exact h
 
-@[simp]
-theorem Formula.safe_subst_equiv (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t) :
-    φ.subst i t = φ.safeSub i t h := by
-  induction φ with
-  | atom n args | falsum => simp only [subst, safeSub]
-  | impl x y hx hy => simp only [subst, safeSub, impl.injEq]; exact ⟨hx h.left, hy h.right⟩
-  | fall j x h' =>
-    simp only [subst, safeSub]
-    by_cases hi : i = j <;>
-      simp only [hi, ↓reduceIte, ↓reduceDIte, fall.injEq, true_and];
-      simp only [FreeFor] at h;
-      apply h'
-
 lemma Term.subst_self (i : Idx) (t : Term L) :
     Term.subst i (.var i) t = t := by
   induction t with
@@ -97,27 +84,27 @@ lemma Term.subst_self (i : Idx) (t : Term L) :
     exact h x
 
 theorem Formula.subst_self (i : Idx) (φ : Formula L)
-    (h : φ.FreeFor i (.var i)) : φ.safeSub i (.var i) h = φ := by
+    (h : φ.FreeFor i (.var i)) : φ.subst i (.var i) h = φ := by
   induction φ with
   | atom n a =>
-    simp only [safeSub, atom.injEq, heq_eq_eq, true_and]
+    simp only [subst, atom.injEq, heq_eq_eq, true_and]
     funext x
     exact Term.subst_self i (a x)
-  | falsum => unfold safeSub; eq_refl
+  | falsum => unfold subst; eq_refl
   | impl x y hx hy =>
-    unfold safeSub;
+    unfold subst;
     unfold FreeFor at h
     rw [hx h.left]
     rw [hy h.right]
   | fall j ψ h' =>
-    simp only [safeSub, dite_eq_left_iff, fall.injEq, true_and]
+    simp only [subst, dite_eq_left_iff, fall.injEq, true_and]
     by_cases hi : i = j
     · intro hi; contradiction
     · intro _;
       unfold FreeFor at h
       rcases h with h1 | h2 | h3
       · exfalso; exact hi h1
-      · exact h' (out_var_is_free_for_any_term (.var i) h2)
+      · exact h' (out_var_FreeFor_term (.var i) h2)
       · exact h' h3.right
 
 lemma Term.subst_invariance (i : Idx) (t s : Term L) :
@@ -134,22 +121,22 @@ lemma Term.subst_invariance (i : Idx) (t s : Term L) :
     exact h' x (h x)
 
 theorem Formula.subst_invariance {i : Idx} {t : Term L} {φ : Formula L} (h : φ.FreeFor i t) :
-    i ∉ φ.fVars -> φ.safeSub i t h = φ := by
+    i ∉ φ.fVars -> φ.subst i t h = φ := by
   intro hi
   induction φ with
   | atom n args =>
-    simp only [safeSub, atom.injEq, heq_eq_eq, true_and]
+    simp only [subst, atom.injEq, heq_eq_eq, true_and]
     simp only [fVars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists] at hi
     funext x
     exact Term.subst_invariance i t (args x) (hi x)
-  | falsum => dsimp only [safeSub]
+  | falsum => dsimp only [subst]
   | impl x y hx hy =>
-    simp only [safeSub, impl.injEq]
+    simp only [subst, impl.injEq]
     simp only [fVars, Finset.mem_union, not_or] at hi
     dsimp only [FreeFor] at h
     exact ⟨hx h.left hi.left, hy h.right hi.right⟩
   | fall j x hx =>
-    simp only [safeSub, dite_eq_left_iff, fall.injEq, true_and]
+    simp only [subst, dite_eq_left_iff, fall.injEq, true_and]
     simp only [fVars, Finset.mem_erase, ne_eq, not_and] at hi
     by_cases h' : i = j
     · intro h1; exfalso; exact h1 h'
@@ -171,20 +158,20 @@ lemma Term.subst_circulation (i j : Idx) (t : Term L) (hj : j ∉ t.vars) :
     funext k; apply h; apply hj
 
 theorem Formula.subst_circulation (i j : Idx) (φ : Formula L) (hj : j ∉ φ.vars) :
-    let ψ := safeSub i (.var j) φ <| term_FreeFor i (.var j) φ
+    let ψ := subst i (.var j) φ <| term_FreeFor i (.var j) φ
       (by rw [Finset.inter_comm]; exact Finset.inter_singleton_of_notMem hj)
-    ∃ h : FreeFor j (.var i) ψ, safeSub j (.var i) ψ h = φ := by
+    ∃ h : FreeFor j (.var i) ψ, subst j (.var i) ψ h = φ := by
   induction φ with
   | atom n s =>
     use True.intro
-    simp only [safeSub, atom.injEq, heq_eq_eq, true_and]
+    simp only [subst, atom.injEq, heq_eq_eq, true_and]
     simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists] at hj
     funext k
     exact Term.subst_circulation i j _ (hj _)
-  | falsum => use True.intro; dsimp [safeSub]
+  | falsum => use True.intro; dsimp [subst]
   | impl x y hx hy =>
     simp only [vars, Finset.mem_union, not_or] at hj
-    dsimp only [safeSub]
+    dsimp only [subst]
     obtain ⟨hx1, hx2⟩ := hx hj.left
     obtain ⟨hy1, hy2⟩ := hy hj.right
     use ⟨hx1, hy1⟩
@@ -192,12 +179,12 @@ theorem Formula.subst_circulation (i j : Idx) (φ : Formula L) (hj : j ∉ φ.va
   | fall k x h =>
     simp only [vars, Finset.mem_insert, not_or] at hj
     have h' := Finset.notMem_mono (fVars_subset_vars _) hj.right
-    dsimp only [safeSub]
+    dsimp only [subst]
     split_ifs with hi
     · simp only [FreeFor, Term.vars, Finset.mem_singleton]
       refine ⟨?_, ?_⟩
       · right; left; exact h'
-      · dsimp [safeSub]
+      · dsimp [subst]
         split_ifs with hk
         · exfalso; exact hj.left hk
         · congr; exact subst_invariance _ h'
@@ -205,10 +192,121 @@ theorem Formula.subst_circulation (i j : Idx) (φ : Formula L) (hj : j ∉ φ.va
       obtain ⟨h1, h2⟩ := h hj.right
       refine ⟨?_, ?_⟩
       · right; right; exact ⟨ne_comm.mp hi, h1⟩
-      · dsimp [safeSub]
+      · dsimp [subst]
         split_ifs with hk
         · exfalso; exact hj.left hk
         · rw [fall.injEq]; exact ⟨rfl, h2⟩
+
+-- Prepared for completeness proofs.
+def Formula.loose (t : Term L) (i : Idx) : Formula L -> Formula L
+  | x@(.atom ..) => x
+  | .falsum => .falsum
+  | .impl φ ψ => .impl (φ.loose t i) (ψ.loose t i)
+  | .fall j φ =>
+    let ψ := φ.loose t i
+    let k := Freshable.fresh <| insert i (ψ.vars ∪ t.vars)
+    have h : FreeFor j (.var k) ψ := term_FreeFor _ _ _ <| by
+      unfold Term.vars; rw [Finset.singleton_inter]
+      split_ifs with hk
+      · exfalso; dsimp only [k] at hk
+        apply Freshable.fresh_is_new (insert i (ψ.vars ∪ t.vars))
+        open Finset in
+        refine mem_of_subset ?_ hk
+        exact subset_trans (subset_union_left ..) (subset_insert ..)
+      · rfl
+    .fall k <| ψ.subst j (.var k) h
+
+lemma Term.subst_vars (i : Idx) (s t : Term L) :
+    (subst i s t).vars ⊆ s.vars ∪ (t.vars.erase i) := by
+  induction t with
+  | var j =>
+    unfold subst
+    split_ifs with h
+    · apply Finset.subset_union_left
+    · conv => lhs; unfold vars
+      conv =>
+        rhs; rhs; unfold vars
+        rw [Finset.erase_eq_of_notMem (by rw [Finset.mem_singleton]; exact h)]
+      apply Finset.subset_union_right
+  | app n a h =>
+    dsimp only [subst, vars]
+    rw [Finset.biUnion_subset_iff_forall_subset]
+    intro x hx
+    apply subset_trans (h x)
+    apply Finset.union_subset_union_right
+    apply Finset.erase_subset_erase
+    exact Finset.subset_biUnion_of_mem
+      (s := @Finset.univ (Fin (L.funcs n)) _) (fun k => (a k).vars) hx
+
+theorem Formula.subst_vars (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor i t φ) :
+    (subst i t φ h).fVars ⊆ t.vars ∪ (φ.fVars.erase i) := by
+  open Finset in
+  induction φ with
+  | atom n a =>
+    dsimp [subst, fVars];
+    rw [biUnion_subset_iff_forall_subset]
+    intro x hx
+    apply subset_trans <| Term.subst_vars ..
+    apply union_subset_union_right
+    apply Finset.erase_subset_erase
+    exact subset_biUnion_of_mem
+      (s := @univ (Fin (L.preds n)) _) (fun k => (a k).vars) hx
+  | falsum => dsimp [subst, fVars]; apply subset_union_right
+  | impl x y hx hy =>
+    dsimp [subst, fVars]
+    unfold FreeFor at h
+    conv =>
+      rhs; rw [←union_self t.vars, erase_union_distrib, ←union_assoc]
+      conv => lhs; rw [union_assoc, union_comm]
+      rw [union_assoc]
+    apply Finset.union_subset_union
+    · exact hx h.left
+    · exact hy h.right
+  | fall j ψ h' =>
+    dsimp [subst, fVars]
+    split_ifs with hij
+    · dsimp [fVars]; rw [hij, erase_idem]; apply subset_union_right
+    · dsimp [fVars]
+      unfold FreeFor at h
+      replace h := Or.resolve_left h hij
+      rcases h with h1 | h2
+      · rw [subst_invariance _ h1, erase_right_comm, erase_eq_of_notMem h1]
+        apply subset_union_right
+      · apply subset_trans <| erase_subset_erase _ (h' h2.right)
+        rw [erase_union_distrib, erase_right_comm]
+        apply union_subset_union_left
+        apply erase_subset
+
+lemma Formula.FreeFor_subst (i j : Idx) (t s : Term L) (φ : Formula L)
+    (hi : FreeFor i t φ) (hj : FreeFor j s φ) :
+    i ∉ s.vars -> FreeFor i t (φ.subst j s hj) := fun h => by
+  induction φ with
+  | atom | falsum => trivial
+  | impl x y hx hy =>
+    unfold subst FreeFor
+    unfold FreeFor at hi hj
+    exact ⟨hx hi.left hj.left, hy hi.right hj.right⟩
+  | fall k ψ h' =>
+    unfold subst
+    unfold FreeFor at hj
+    split_ifs with hjk
+    · exact hi
+    · unfold FreeFor at hi ⊢
+      rcases hi with h1 | h2 | h3
+      · left; exact h1;
+      · right
+        replace hj := Or.resolve_left hj hjk
+        left
+        apply Finset.not_mem_subset (t := s.vars ∪ ψ.fVars)
+        · apply subset_trans (subst_vars ..)
+          apply Finset.union_subset_union_right
+          apply Finset.erase_subset
+        · rw [Finset.notMem_union]; exact ⟨h, h2⟩
+      · right
+        rcases Or.resolve_left hj hjk with h4 | h5
+        · right; refine ⟨h3.left, ?_⟩
+          apply h' h3.right
+        · right; exact ⟨h3.left, h' h3.right h5.right⟩
 
 theorem Formula.loose_FreeFor (i : Idx) (t : Term L) (φ : Formula L) :
     FreeFor i t (φ.loose t i) := by
@@ -217,11 +315,18 @@ theorem Formula.loose_FreeFor (i : Idx) (t : Term L) (φ : Formula L) :
   | impl x y hx hy => unfold loose FreeFor; exact ⟨hx, hy⟩
   | fall j x h =>
     unfold loose FreeFor
+    open Finset in
     right; right; constructor
     · have : t.vars ⊆ insert i ((loose t i x).vars ∪ t.vars) :=
-        subset_trans (Finset.subset_union_right ..) (Finset.subset_insert ..)
-      exact Finset.not_mem_subset this <| Freshable.fresh_is_new _
-    · sorry
+        subset_trans (subset_union_right ..) (subset_insert ..)
+      exact not_mem_subset this <| Freshable.fresh_is_new _
+    · apply FreeFor_subst _ _ _ _ _ h
+      unfold Term.vars
+      rw [notMem_singleton]
+      by_contra
+      have h' := Freshable.fresh_is_new <| insert i ((loose t i x).vars ∪ t.vars)
+      rw [←this, mem_insert, not_or] at h'
+      exact h'.left rfl
 
 section substFun
 variable [DecidableEq LF]
@@ -305,19 +410,19 @@ lemma Formula.substFun_FreeFor {i : Idx} {f : LF} {ir fr : Term L} {φ : Formula
 
 theorem Formula.fun_var_subst_distrib (i : Idx) (f : LF) (ir fr : Term L) (φ : Formula L)
     (h : FreeFor i ir φ) (h1 : i ∉ fr.vars) (hb : fr.vars ∩ φ.bVars = ∅) :
-    Formula.substFun fr f (safeSub i ir φ h) =
-      safeSub i (Term.substFun fr f ir) (Formula.substFun fr f φ) (substFun_FreeFor h h1 hb) := by
+    Formula.substFun fr f (subst i ir φ h) =
+      subst i (Term.substFun fr f ir) (Formula.substFun fr f φ) (substFun_FreeFor h h1 hb) := by
   induction φ with
   | atom p s =>
-    simp only [safeSub, substFun, atom.injEq, heq_eq_eq, true_and]
+    simp only [subst, substFun, atom.injEq, heq_eq_eq, true_and]
     funext k; apply Term.fun_var_subst_distrib; exact h1
-  | falsum => dsimp only [safeSub, substFun]
+  | falsum => dsimp only [subst, substFun]
   | impl x y hx hy =>
-    simp only [safeSub, substFun, impl.injEq]
+    simp only [subst, substFun, impl.injEq]
     simp only [bVars, Finset.inter_union_distrib_left, Finset.union_eq_empty] at hb
     exact ⟨hx _ hb.left, hy _ hb.right⟩
   | fall j x h' =>
-    dsimp only [safeSub, substFun]
+    dsimp only [subst, substFun]
     split_ifs with h1
     · rw [←h1]; dsimp only [substFun]
     · simp only [substFun, fall.injEq, true_and]
@@ -326,7 +431,7 @@ theorem Formula.fun_var_subst_distrib (i : Idx) (f : LF) (ir fr : Term L) (φ : 
       split_ifs at hb with h5
       · exfalso; simp only [Finset.insert_ne_empty] at hb
       · rcases h with h2 | h3
-        · have := out_var_is_free_for_any_term ir h2
+        · have := out_var_FreeFor_term ir h2
           exact h' this hb
         · exact h' h3.right hb
 

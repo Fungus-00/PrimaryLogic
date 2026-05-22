@@ -27,7 +27,7 @@ def FOLAxioms.toFormula (L : Lang LF LP) : FOLAxioms L -> Formula L
   | .h2 φ ψ χ => .impl (.impl φ (.impl ψ χ)) (.impl (.impl φ ψ) (.impl φ χ))
   | .h3 φ => .impl (.impl (.impl φ .falsum) .falsum) φ
   | .q1 i φ ψ => .impl (.fall i (.impl φ ψ)) (.impl (.fall i φ) (.fall i ψ))
-  | .q2 i t φ h => .impl (.fall i φ) (φ.safeSub i t h)
+  | .q2 i t φ h => .impl (.fall i φ) (φ.subst i t h)
   | .q3 i φ _ => .impl φ (.fall i φ)
   | .gen i a => .fall i (toFormula L a)
 

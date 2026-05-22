@@ -198,14 +198,7 @@ def FreeFor (i : Idx) (t : Term L) : Formula L -> Prop
   | impl φ ψ => φ.FreeFor i t ∧ ψ.FreeFor i t
   | fall j φ => i = j ∨ i ∉ φ.fVars ∨ j ∉ t.vars ∧ φ.FreeFor i t
 
-def subst (i : Idx) (t : Term L) (φ : Formula L) : Formula L :=
-  match φ with
-  | atom n args => atom n (fun k => Term.subst i t (args k))
-  | falsum => falsum
-  | impl ψ χ => impl (ψ.subst i t) (χ.subst i t)
-  | fall j ψ => if i = j then fall j ψ else fall j (ψ.subst i t)
-
-theorem out_var_is_free_for_any_term {i : Idx} (t : Term L) {φ : Formula L} :
+theorem out_var_FreeFor_term {i : Idx} (t : Term L) {φ : Formula L} :
     i ∉ φ.fVars -> φ.FreeFor i t := by
   intro h
   induction φ with
@@ -221,35 +214,25 @@ theorem out_var_is_free_for_any_term {i : Idx} (t : Term L) {φ : Formula L} :
     · left; exact h'
     · right; left; exact h h'
 
-def safeSub (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t) : Formula L :=
+def subst (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t) : Formula L :=
   match φ with
   | atom n args => atom n (fun k => Term.subst i t (args k))
   | falsum => falsum
-  | impl ψ χ => impl (ψ.safeSub i t h.left) (χ.safeSub i t h.right)
+  | impl ψ χ => impl (ψ.subst i t h.left) (χ.subst i t h.right)
   | fall j ψ => if hi : i = j then fall j ψ else
     have h' : ψ.FreeFor i t := by
       unfold FreeFor at h
       rcases h with h1 | h2 | h3
       · exfalso; exact hi h1
-      · exact Formula.out_var_is_free_for_any_term t h2
+      · exact out_var_FreeFor_term t h2
       · exact h3.right
-    fall j (ψ.safeSub i t h')
+    fall j (ψ.subst i t h')
 
 def substFun [DecidableEq LF] (t : Term L) (f : LF) : Formula L -> Formula L
   | .atom p s => .atom p fun k => Term.substFun t f (s k)
   | .falsum => .falsum
   | .impl φ ψ => .impl (φ.substFun t f) (ψ.substFun t f)
   | .fall i φ => .fall i (φ.substFun t f)
-
--- Prepared for completeness proofs.
-def loose (t : Term L) (i : Idx) : Formula L -> Formula L
-  | x@(.atom ..) => x
-  | .falsum => .falsum
-  | .impl φ ψ => .impl (φ.loose t i) (ψ.loose t i)
-  | .fall j φ =>
-    let ψ := φ.loose t i
-    let k := Freshable.fresh (insert i (ψ.vars ∪ t.vars))
-    .fall k (ψ.subst j (.var k))
 
 structure axiomMor (L : Lang LF LP) (c : LF) (s : Finset Idx) where
   τ : Term L -> Term L
@@ -260,7 +243,7 @@ structure axiomMor (L : Lang LF LP) (c : LF) (s : Finset Idx) where
   free_var : ∀ {i}, ∀ {φ : Formula L}, i ∉ φ.fVars → i ∈ s → φ.vars ⊆ s → i ∉ (f φ).fVars
   free_for : ∀ {i t φ}, FreeFor i t φ → i ∈ s → φ.bVars ⊆ s  → FreeFor i (τ t) (f φ)
   subst_comm : ∀ {i t φ} h, (h1 : i ∈ s) → (h2 : φ.bVars ⊆ s) →
-    f (safeSub i t φ h) = safeSub i (τ t) (f φ) (free_for h h1 h2)
+    f (subst i t φ h) = subst i (τ t) (f φ) (free_for h h1 h2)
 end Formula
 
 end subst
@@ -280,18 +263,18 @@ def Formula.depth : Formula L -> Nat
   | fall _ φ => φ.depth + 1
 
 theorem Formula.subst_depth_invariance (i : Idx) (t : Term L) (φ : Formula L)
-    (h : FreeFor i t φ) : (φ.safeSub i t h).depth = φ.depth := by
+    (h : FreeFor i t φ) : (φ.subst i t h).depth = φ.depth := by
   induction φ with
-  | atom | falsum => unfold safeSub depth; rfl
+  | atom | falsum => unfold subst depth; rfl
   | impl x y hx hy =>
-    dsimp [safeSub, depth]
+    dsimp [subst, depth]
     unfold FreeFor at h
     rw [Nat.add_right_cancel_iff]
     apply congr_arg₂
     · exact hx h.left
     · exact hy h.right
   | fall j ψ h' =>
-    dsimp [safeSub, depth]
+    dsimp [subst, depth]
     unfold FreeFor at h
     split_ifs with hi
     · conv => lhs; unfold depth
@@ -299,7 +282,7 @@ theorem Formula.subst_depth_invariance (i : Idx) (t : Term L) (φ : Formula L)
       rw [Nat.add_right_cancel_iff]
       rcases h with h1 | h2 | h3
       · exfalso; exact hi h1
-      · exact h' <| out_var_is_free_for_any_term t h2
+      · exact h' <| out_var_FreeFor_term t h2
       · exact h' h3.right
 
 theorem Formula.substFun_depth_invariance [DecidableEq LF] (f : LF) (t : Term L) (φ : Formula L) :

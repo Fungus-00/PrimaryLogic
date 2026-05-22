@@ -18,7 +18,7 @@ theorem Term.interpret_termModel (t : Term L) : interpret (TermModel Δ) .var t 
     congr; funext k; exact h k
 
 def Formula.henkin (i : Idx) (φ : Formula L) (t : Term L) (h : t.isConst) : Formula L :=
-  (¬∀i# φ) → ¬(safeSub i t φ <| const_FreeFor i φ t h)
+  (¬∀i# φ) → ¬(subst i t φ <| const_FreeFor i φ t h)
 
 class Henkin (Δ : Set (Formula L)) (θ : Formula L -> Term L) : Prop where
   mc : MaximalConsistent Δ
@@ -66,7 +66,7 @@ theorem Formula.interpret_termModel [hk : Henkin Δ θ] (φ : Formula L) :
       have h3 := const_FreeFor i ψ (θ ψ) (hk.pt ψ)
       rw [←Term.interpret_termModel (Δ := Δ) (θ ψ), ←interpret_subst _ _ h3,
         h ψ.depth (by omega) _ (subst_depth_invariance ..), maxConSet_iff _ _ hk.mc] at h2
-      have h4 : ¬ (Δ ⊢ (¬ (safeSub i (θ ψ) ψ h3))) := by
+      have h4 : ¬ (Δ ⊢ (¬ (subst i (θ ψ) ψ h3))) := by
         by_contra; exact hk.mc.left <| .mp this h2
       have p := hk.ax i ψ
       rw [maxConSet_iff _ _ hk.mc] at p
