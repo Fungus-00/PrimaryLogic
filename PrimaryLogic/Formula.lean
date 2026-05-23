@@ -262,7 +262,7 @@ def Formula.depth : Formula L -> Nat
   | impl φ ψ => max (φ.depth) (ψ.depth) + 1
   | fall _ φ => φ.depth + 1
 
-theorem Formula.subst_depth_invariance (i : Idx) (t : Term L) (φ : Formula L)
+theorem Formula.subst_depth_eq (i : Idx) (t : Term L) (φ : Formula L)
     (h : FreeFor i t φ) : (φ.subst i t h).depth = φ.depth := by
   induction φ with
   | atom | falsum => unfold subst depth; rfl
@@ -270,9 +270,7 @@ theorem Formula.subst_depth_invariance (i : Idx) (t : Term L) (φ : Formula L)
     dsimp [subst, depth]
     unfold FreeFor at h
     rw [Nat.add_right_cancel_iff]
-    apply congr_arg₂
-    · exact hx h.left
-    · exact hy h.right
+    exact congr_arg₂ _ (hx h.left) (hy h.right)
   | fall j ψ h' =>
     dsimp [subst, depth]
     unfold FreeFor at h
@@ -285,7 +283,7 @@ theorem Formula.subst_depth_invariance (i : Idx) (t : Term L) (φ : Formula L)
       · exact h' <| out_var_FreeFor_term t h2
       · exact h' h3.right
 
-theorem Formula.substFun_depth_invariance [DecidableEq LF] (f : LF) (t : Term L) (φ : Formula L) :
+theorem Formula.substFun_depth_eq [DecidableEq LF] (f : LF) (t : Term L) (φ : Formula L) :
     φ.depth = (φ.substFun t f).depth := by
   induction φ <;> unfold substFun depth <;> omega
 

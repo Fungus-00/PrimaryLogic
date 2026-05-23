@@ -188,7 +188,7 @@ end runtime
 def Inconsistent (Γ : Set (Formula L)) : Prop := Proof α Γ .falsum
 abbrev Consistent (Γ : Set (Formula L)) : Prop := ¬ Inconsistent α Γ
 
-theorem Proof.monotone {Γ Δ} {φ : Formula L} :
+theorem Proof.monotone {α : outParam Type} [AxiomSchema L α] {Γ Δ} {φ : Formula L} :
   Γ ⊆ Δ -> Proof α Γ φ -> Proof α Δ φ := fun h p =>
   match p with
   | asp ψ hi => asp ψ (h hi)

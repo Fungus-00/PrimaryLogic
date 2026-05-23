@@ -15,7 +15,8 @@ A personal formalization project in Lean 4, building first-order logic from scra
 - [x] Soundness
 - [x] Deduction theorem, propositional meta-theorems
 - [x] Lindenbaum maximal consistent extension
-- [-] Henkin term model / truth lemma
+- [x] Term model / Truth lemma
+- [-] Henkin construction
 - [ ] Completeness
 
 ## Key Design Decisions
@@ -31,5 +32,4 @@ Build with `lake build`.
 ## Notes
 
 - Heavily commented for human readability
-- Some `sorry`s remain in active development areas
 - `Hom.lean` contains categorical infrastructure for future language extensions

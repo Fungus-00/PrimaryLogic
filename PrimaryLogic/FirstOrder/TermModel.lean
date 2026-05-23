@@ -1,4 +1,5 @@
 import PrimaryLogic.FirstOrder.MaximalConsistent
+import PrimaryLogic.FirstOrder.Soundness
 
 namespace PrimaryLogic
 variable {LF LP : Type} {L : Lang LF LP}
@@ -25,8 +26,8 @@ class Henkin (Δ : Set (Formula L)) (θ : Formula L -> Term L) : Prop where
   pt : ∀ φ : Formula L, Term.isConst (θ φ)
   ax : ∀ i : Idx, ∀ φ : Formula L, Formula.henkin i φ (θ φ) (pt φ) ∈ Δ
 
-variable {θ : Formula L -> Term L} [hk : Henkin Δ θ]
-theorem Formula.interpret_termModel [hk : Henkin Δ θ] (φ : Formula L) :
+variable {θ : Formula L -> Term L}
+theorem Formula.truth_lemma [hk : Henkin Δ θ] (φ : Formula L) :
     interpret (TermModel Δ) .var φ ↔ φ ∈ Δ := by
   induction hd : φ.depth using Nat.strongRec generalizing φ with
   | ind d h => cases φ with
@@ -59,27 +60,44 @@ theorem Formula.interpret_termModel [hk : Henkin Δ θ] (φ : Formula L) :
       rw [maxConSet_iff Δ x hk.mc] at g
       exact .mp h g
   | fall i ψ =>
+    have m (x : Formula L) := maxConSet_iff Δ x hk.mc
     unfold interpret; constructor
     · intro h1
       unfold depth at hd
       have h2 := h1 (θ ψ)
       have h3 := const_FreeFor i ψ (θ ψ) (hk.pt ψ)
       rw [←Term.interpret_termModel (Δ := Δ) (θ ψ), ←interpret_subst _ _ h3,
-        h ψ.depth (by omega) _ (subst_depth_invariance ..), maxConSet_iff _ _ hk.mc] at h2
-      have h4 : ¬ (Δ ⊢ (¬ (subst i (θ ψ) ψ h3))) := by
-        by_contra; exact hk.mc.left <| .mp this h2
+        h ψ.depth (by omega) _ (subst_depth_eq ..), m] at h2
+      have h4 : ¬ (Δ ⊢ (¬ (subst i (θ ψ) ψ h3))) :=
+        fun h' => hk.mc.left <| .mp h' h2
       have p := hk.ax i ψ
-      rw [maxConSet_iff _ _ hk.mc] at p
+      rw [m] at p
       unfold henkin at p
       by_contra
       have h6 : (¬∀i# ψ) ∈ Δ := by
         rcases hk.mc.right (fall i ψ) with hl | hr
         · exfalso; exact this hl
         · exact hr
-      rw [maxConSet_iff _ _ hk.mc] at h6
+      rw [m] at h6
       exact h4 <| .mp p h6
-    · intro h1 t
-      let χ := ψ.loose t i
-      sorry
+    · intro p t
+      --let χ := ψ.loose t i
+      rw [m] at p
+      have ⟨q, r⟩ := Proof.loose_equiv i t ψ
+      replace r := Proof.impl_all_intro i r
+      conv at r => rw [Set.singleton_def]; dsimp [insert]; rw [Proof.deduction]
+      replace r := Proof.monotone (Set.empty_subset Δ) r
+      replace p := Proof.mp r p
+      have p' := Proof.axm (Γ := Δ) <| FOLAxioms.q2 i t (loose t i ψ) (loose_FreeFor ..)
+      replace p := Proof.mp p' p
+      replace p := (m _).mpr p
+      unfold depth at hd
+      rw [←h ψ.depth (by omega) _ <| Eq.trans (subst_depth_eq ..) (loose_depth_eq ..),
+        interpret_subst, Term.interpret_termModel] at p
+      apply soundness _ _ q _ (TermModel Δ) (replace Term.var i t)
+      intro g hg
+      rw [Set.mem_singleton_iff] at hg
+      rw [hg]
+      exact p
 
 end PrimaryLogic

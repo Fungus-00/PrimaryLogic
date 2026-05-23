@@ -28,7 +28,7 @@ theorem deduction (Γ) (φ ψ : Formula L) :
     | @mp x y _ _ h1 h2 => exact ((AX Γ (.h2 φ x y)).mp h1).mp h2
   · intro p
     have : FOLProof (Γ.insert φ) (φ → ψ) :=
-      monotone (FOLAxioms L) (Set.subset_insert φ Γ) p
+      monotone (Set.subset_insert φ Γ) p
     exact this.mp (asp φ (Set.mem_insert φ Γ))
 
 lemma impl_trans {x y z : Formula L} :
@@ -36,13 +36,13 @@ lemma impl_trans {x y z : Formula L} :
   have h0 : (Γ.insert _).insert _ = (Γ.insert _).insert _ := Set.insert_comm x (x → y → z) Γ
   have p1 := AX Γ (.h2 x y z)
   have p2 := (deduction Γ (x → y → z) ((x → y) → (x → z))).mpr p1
-  have p3 := monotone (FOLAxioms L) (Set.subset_insert (x → y → z) Γ) h
+  have p3 := monotone (Set.subset_insert (x → y → z) Γ) h
   have p4 := mp p2 p3
   have p5 := (deduction _ x z).mpr p4
   have p6 := cast (by rw [h0]) p5
   have p7 := (deduction _ (x → y → z) z).mp p6
   have p8 := AX (Γ.insert x) (.h1 (y → z) x)
-  have p9 := monotone (FOLAxioms L) (Set.subset_insert x Γ) g
+  have p9 := monotone (Set.subset_insert x Γ) g
   have p10 := mp p8 p9
   have p11 := mp p7 p10
   (deduction Γ x z).mp p11
@@ -135,7 +135,7 @@ lemma all_comm (φ : Formula L) (i j : Idx) :
   have p5 := gen_rule _ φ i hi p4
   have p6 := gen_rule _ (∀i# φ) j hj p5
   have p7 := (deduction ∅ _ _).mp p6
-  have p8 := Proof.monotone (FOLAxioms L) (Set.empty_subset Γ) p7
+  have p8 := Proof.monotone (Set.empty_subset Γ) p7
   (deduction Γ ..).mpr p8
 
 lemma impl_all_intro (i : Idx) {φ ψ : Formula L} (p : {φ} ⊢ ψ) : {∀i#φ} ⊢ ∀i#ψ :=
@@ -154,35 +154,60 @@ theorem loose_equiv (i : Idx) (t : Term L) (φ : Formula L) :
   induction φ with
   | atom | falsum => unfold loose; split_ands <;> exact asp _ (mem_singleton _)
   | impl x y hx hy =>
-    unfold loose;
+    unfold loose
     repeat rw [singleton_def, insert] at hx hy
     dsimp [instInsert] at hx hy
     repeat rw [deduction] at hx hy
     split_ands
     · let ψ := loose t i x → loose t i y
-      have p1 := monotone _ (Δ := {ψ}) (empty_subset _) hx.right
+      have p1 := monotone (empty_subset {ψ}) hx.right
       have p2 := asp (α := FOLAxioms L) (Γ := {ψ}) ψ (mem_singleton _)
-      have p3 := monotone _ (Δ := {ψ}) (empty_subset _) hy.left
+      have p3 := monotone (empty_subset {ψ}) hy.left
       exact impl_trans (impl_trans p1 p2) p3
     · let ψ := x → y
-      have p1 := monotone _ (Δ := {ψ}) (empty_subset _) hx.left
+      have p1 := monotone (empty_subset {ψ}) hx.left
       have p2 := asp (α := FOLAxioms L) (Γ := {ψ}) ψ (mem_singleton _)
-      have p3 := monotone _ (Δ := {ψ}) (empty_subset _) hy.right
+      have p3 := monotone (empty_subset {ψ}) hy.right
       exact impl_trans (impl_trans p1 p2) p3
   | fall j ψ h =>
+    rcases h with ⟨p1, p2⟩
+    let χ := ψ.loose t i
+    let k := Freshable.fresh <| insert i (χ.vars ∪ t.vars)
+    have hk : k ∉ χ.vars := Finset.not_mem_subset
+      (subset_trans (Finset.subset_union_left ..) (Finset.subset_insert ..))
+      (Freshable.fresh_is_new (insert i (χ.vars ∪ t.vars)))
+    have hj : FreeFor j (.var k) χ := by
+      apply term_FreeFor
+      unfold Term.vars
+      simp only [hk, not_false_eq_true, Finset.singleton_inter_of_notMem]
     split_ands
-    · sorry
-    · let χ := ψ.loose t i
-      let k := Freshable.fresh <| insert i (χ.vars ∪ t.vars)
-      have hk : k ∉ χ.vars := Finset.not_mem_subset
-        (subset_trans (Finset.subset_union_left ..) (Finset.subset_insert ..))
-        (Freshable.fresh_is_new (insert i (χ.vars ∪ t.vars)))
-      have p1 := impl_all_intro j h.right
-      have h2 : FreeFor j (.var k) χ := by
-        apply term_FreeFor
+    · let χ' := χ.subst j (.var k) hj
+      obtain ⟨h3, h4⟩ := subst_circulation j k χ hk
+      have p3 := AX ∅ (.q2 k (.var j) χ' h3)
+      dsimp [AxiomSchema.toFormula, FOLAxioms.toFormula] at p3
+      rw [h4] at p3
+      replace p3 := (deduction ..).mpr p3
+      conv at p1 => rw [singleton_def]; dsimp [insert]; rw [deduction]
+      replace p1 := monotone (empty_subset <| Set.insert (∀k#χ') ∅) p1
+      have p4 := p1.mp p3
+      have h5 : j ∉ (∀k#χ').fVars := by
+        unfold fVars
+        rw [Finset.mem_erase, not_and]
+        intro hjk
+        unfold χ'
+        apply Finset.not_mem_subset (subst_vars ..)
         unfold Term.vars
-        simp only [hk, not_false_eq_true, Finset.singleton_inter_of_notMem]
-      have p2 := Proof.AX ∅ (.q2 j (.var k) χ h2)
+        rw [Finset.mem_union, not_or, Finset.mem_singleton]
+        exact ⟨hjk, Finset.notMem_erase _ _⟩
+      rw [singleton_def]; dsimp [insert]
+      refine gen_rule _ _ _ ?_ p4
+      intro g hg
+      dsimp [Set.insert] at hg
+      replace hg := Or.resolve_right hg (notMem_empty g)
+      rw [hg]
+      exact h5
+    · have p1 := impl_all_intro j p2
+      have p2 := Proof.AX ∅ (.q2 j (.var k) χ hj)
       have p3 := (deduction ..).mpr p2
       replace p3 := gen_rule _ _ k (by
         intro g hg
@@ -193,7 +218,7 @@ theorem loose_equiv (i : Idx) (t : Term L) (φ : Formula L) :
         exact Finset.not_mem_subset (fVars_subset_vars ..) hk
         ) p3
       replace p3 := (deduction ..).mp p3
-      replace p3 := monotone (Δ := {Formula.fall j ψ}) _ (empty_subset _) p3
+      replace p3 := monotone (empty_subset {Formula.fall j ψ}) p3
       exact mp p3 p1
 
 end Proof

@@ -1,32 +1,26 @@
 import PrimaryLogic.FirstOrder.Axiom
 
 namespace PrimaryLogic
-variable {LF LP : Type} (L : Lang LF LP)
+variable {LF LP : Type} {L : Lang LF LP}
 
-class HasEq (L : Lang LF LP) : Type where
-  eq_i : LP
-  pred_is_eq : L.preds eq_i = 2
-  eq_args (t s : Term L) : Fin 2 → Term L :=
-    fun | ⟨0, _⟩ => t | ⟨1, _⟩ => s
-  eq_pred (t s : Term L) : Formula L := .atom eq_i
-    fun k => eq_args t s <| cast (by rw [pred_is_eq]) k
+def BinPred (eq : Term L -> Term L -> Formula L) : Prop :=
+  ∀ x y, (eq x y).fVars = x.vars ∪ y.vars
 
-variable (L : Lang LF LP) [HasEq L]
+inductive EqAxioms (eq : Term L -> Term L -> Formula L) (h : BinPred eq) : Type
+  | rfl (t : Term L)
+  | sub (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t)
 
-inductive EqAxioms : Type
-  | rfl : Term L -> EqAxioms
-  | sub (i : Idx) (t : Term L) (φ : Formula L) : φ.FreeFor i t -> EqAxioms
+variable {eq : Term L -> Term L -> Formula L} {h : BinPred eq}
 
-instance : AxiomSchema L (EqAxioms L) where toFormula := fun
-  | .rfl t => HasEq.eq_pred t t
-  | .sub i t φ h => .impl (HasEq.eq_pred (.var i) t)
-    (.impl φ (φ.safeSub i t h))
+instance : AxiomSchema L (EqAxioms eq h) where toFormula := fun
+  | .rfl t => eq t t
+  | .sub i t φ h => eq (.var i) t → φ → φ.subst i t h
 
-inductive HilbertAxioms : Type
-  | fol : FOLAxioms L -> HilbertAxioms
-  | eq : EqAxioms L -> HilbertAxioms
+inductive HilbertAxioms (eq : Term L -> Term L -> Formula L) (h : BinPred eq) : Type
+  | fol : FOLAxioms L -> HilbertAxioms eq h
+  | eq : EqAxioms eq h -> HilbertAxioms eq h
 
-instance : AxiomSchema L (HilbertAxioms L) where toFormula := fun
+instance : AxiomSchema L (HilbertAxioms eq h) where toFormula := fun
   | .fol a | .eq a => AxiomSchema.toFormula (L := L) a
 
 end PrimaryLogic

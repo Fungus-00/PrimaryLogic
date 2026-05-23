@@ -93,9 +93,9 @@ lemma maximalSet_compact (φ : Formula L) : (maxExpand Γ ⊢ φ) -> ∃ n : Nat
     obtain ⟨n, hn⟩ := hq
     use max m n
     have := expandAdd_monotone Γ m (max m n) (Nat.le_max_left m n)
-    have h1 := Proof.monotone (FOLAxioms L) this hm
+    have h1 := Proof.monotone this hm
     have := expandAdd_monotone Γ n (max m n) (Nat.le_max_right m n)
-    have h2 := Proof.monotone (FOLAxioms L) this hn
+    have h2 := Proof.monotone this hn
     exact Proof.mp h1 h2
 
 theorem Lindenbaum : Con Γ -> MaximalConsistent (maxExpand Γ) := by

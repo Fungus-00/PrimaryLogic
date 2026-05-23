@@ -157,9 +157,12 @@ lemma Term.subst_circulation (i j : Idx) (t : Term L) (hj : j ∉ t.vars) :
     simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and, not_exists] at hj
     funext k; apply h; apply hj
 
+theorem Formula.var_var_FreeFor (i j : Idx) (φ : Formula L) (hj : j ∉ φ.vars) :
+    FreeFor i (.var j) φ := term_FreeFor i (.var j) φ <|
+  (Finset.inter_comm φ.vars (Term.var j).vars) ▸ Finset.inter_singleton_of_notMem hj
+
 theorem Formula.subst_circulation (i j : Idx) (φ : Formula L) (hj : j ∉ φ.vars) :
-    let ψ := subst i (.var j) φ <| term_FreeFor i (.var j) φ
-      (by rw [Finset.inter_comm]; exact Finset.inter_singleton_of_notMem hj)
+    let ψ := subst i (.var j) φ <| var_var_FreeFor i j φ hj
     ∃ h : FreeFor j (.var i) ψ, subst j (.var i) ψ h = φ := by
   induction φ with
   | atom n s =>
@@ -327,6 +330,19 @@ theorem Formula.loose_FreeFor (i : Idx) (t : Term L) (φ : Formula L) :
       have h' := Freshable.fresh_is_new <| insert i ((loose t i x).vars ∪ t.vars)
       rw [←this, mem_insert, not_or] at h'
       exact h'.left rfl
+
+theorem Formula.loose_depth_eq (i : Idx) (t : Term L) (φ : Formula L) :
+    (φ.loose t i).depth = φ.depth := by
+  induction φ with
+  | atom | falsum => unfold loose depth; rfl
+  | impl x y hx hy =>
+    unfold loose depth
+    rw [Nat.add_right_cancel_iff]
+    exact congr_arg₂ _ hx hy
+  | fall j ψ h =>
+    unfold loose depth
+    rw [Nat.add_right_cancel_iff, ←h]
+    apply subst_depth_eq
 
 section substFun
 variable [DecidableEq LF]
