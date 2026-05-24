@@ -120,7 +120,7 @@ lemma Term.subst_invariance (i : Idx) (t s : Term L) :
     funext x
     exact h' x (h x)
 
-theorem Formula.subst_invariance {i : Idx} {t : Term L} {φ : Formula L} (h : φ.FreeFor i t) :
+theorem Formula.subst_invariance {i : Idx} {t : Term L} {φ : Formula L} (h : FreeFor i t φ) :
     i ∉ φ.fVars -> φ.subst i t h = φ := by
   intro hi
   induction φ with
@@ -344,6 +344,142 @@ theorem Formula.loose_depth_eq (i : Idx) (t : Term L) (φ : Formula L) :
     rw [Nat.add_right_cancel_iff, ←h]
     apply subst_depth_eq
 
+section map
+
+class SplitVars (f g : Idx -> Idx) : Prop where
+  left : Function.Injective f
+  right : Function.Injective g
+  range_disjoint : ∀ x y, f x ≠ g y
+
+instance : SplitVars (· * 2) (· * 2 + 1) where
+  left := by unfold Function.Injective Idx; intro a b h; dsimp at h; omega
+  right := by unfold Function.Injective Idx; intro a b h; dsimp at h; omega
+  range_disjoint := by unfold Idx; intro a b; omega
+
+variable (f : Idx -> Idx)
+
+def Term.varMap : Term L -> Term L
+  | var i => .var (f i)
+  | app n s => .app n fun k => varMap (s k)
+
+def Formula.varMap : Formula L -> Formula L
+  | atom n s => atom n fun k => Term.varMap f (s k)
+  | falsum => falsum
+  | impl φ ψ => impl (varMap φ) (varMap ψ)
+  | fall i φ => fall (f i) (varMap φ)
+
+lemma Term.varMap_vars (t : Term L) : (varMap f t).vars = t.vars.image f := by
+  induction t with
+  | var i => unfold varMap vars; rw [Finset.image_singleton]
+  | app n s h =>
+    unfold varMap vars
+    rw [Finset.biUnion_image]
+    dsimp
+    conv => lhs; arg 2; intro k; rw [h k]
+
+lemma Formula.varMap_vars (φ : Formula L) : (varMap f φ).vars = φ.vars.image f := by
+  induction φ with
+  | atom n s =>
+    unfold varMap vars
+    rw [Finset.biUnion_image]
+    dsimp
+    conv => lhs; arg 2; intro k; rw [Term.varMap_vars]
+  | falsum => rfl
+  | impl x y hx hy =>
+    unfold varMap vars
+    rw [Finset.image_union, hx, hy]
+  | fall i ψ h =>
+    unfold varMap vars
+    rw [Finset.image_insert, h]
+
+lemma Formula.varMap_fVars {f : Idx -> Idx} (hf : Function.Injective f) (φ : Formula L) :
+    (varMap f φ).fVars = φ.fVars.image f := by
+  induction φ with
+  | atom n s =>
+    unfold varMap fVars
+    rw [Finset.biUnion_image]
+    dsimp
+    conv => lhs; arg 2; intro k; rw [Term.varMap_vars]
+  | falsum => rfl
+  | impl x y hx hy =>
+    unfold varMap fVars
+    rw [Finset.image_union, hx, hy]
+  | fall i ψ h =>
+    unfold varMap fVars
+    rw [Finset.image_erase hf, h]
+
+lemma Term.varMap_subst {f : Idx -> Idx} (hf : Function.Injective f) (i : Idx) (t s : Term L) :
+    (s.subst i t).varMap f = (s.varMap f).subst (f i) (t.varMap f) := by
+  induction t with
+  | var j =>
+    conv => rhs; arg 3; unfold varMap
+    conv => lhs; unfold subst
+    split_ifs with h
+    · rw [h]; simp only [subst, ↓reduceIte]
+    · have := Function.Injective.ne hf h
+      simp only [subst, this, ↓reduceIte]
+      unfold varMap
+      rfl
+  | app n args h =>
+    simp only [subst, varMap]
+    congr; funext k
+    exact h k
+
+lemma Formula.varMap_FreeFor {f : Idx -> Idx} (hf : Function.Injective f)
+    (i : Idx) (t : Term L) (φ : Formula L) :
+    φ.FreeFor i t ↔ (varMap f φ).FreeFor (f i) (t.varMap f) := by
+  induction φ with
+  | atom | falsum => dsimp only [FreeFor, varMap]; rfl
+  | impl x y hx hy => dsimp [FreeFor, varMap]; rw [hx, hy]
+  | fall j ψ h' =>
+    dsimp [FreeFor, varMap]
+    rw [←h']
+    by_cases h : i = j
+    · simp only [h, true_or]
+    · simp only [h, false_or, hf.ne h, Term.varMap_vars, Finset.mem_image, not_exists, not_and]
+      rw [varMap_fVars hf, hf.mem_finset_image]
+      suffices x : (∀ x ∈ t.vars, ¬f x = f j) ↔ j ∉ t.vars from by rw [x]
+      constructor
+      · intro h2; by_contra
+        exact h2 j this rfl
+      · intro h2 k hk; by_contra
+        have h3 := hf.eq_iff.mp this
+        rw [h3] at hk
+        exact h2 hk
+
+lemma Formula.varMap_subst {f : Idx -> Idx} (hf : Function.Injective f)
+    (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t) :
+    (φ.subst i t h).varMap f = (varMap f φ).subst (f i) (t.varMap f) (by
+      rw [←Formula.varMap_FreeFor hf]; exact h) := by
+  induction φ with
+  | atom n s =>
+    dsimp [subst, varMap]
+    congr; funext k
+    apply Term.varMap_subst hf
+  | falsum => rfl
+  | impl x y hx hy => dsimp [subst, varMap]; rw [hx h.left, hy h.right]
+  | fall j ψ h' =>
+    dsimp [Formula.subst, Formula.varMap]
+    split_ifs with h1 h2
+    · conv => lhs; unfold varMap
+    · exfalso; exact h2 (congrArg f h1)
+    · rename_i h2; exfalso; exact h1 <| hf.eq_iff.mp h2
+    · conv => lhs; unfold varMap
+      congr; apply h'
+
+def Formula.varMap_mor {f : Idx -> Idx} (hf : Function.Injective f) : axiomMor L where
+  ι := f
+  τ := Term.varMap f
+  f := Formula.varMap f
+  map_falsum := rfl
+  map_impl φ ψ := rfl
+  map_fall i φ := rfl
+  free_var h := by rw [varMap_fVars hf, Function.Injective.mem_finset_image hf]; exact h
+  free_for h := (varMap_FreeFor hf ..).mp h
+  map_subst h := varMap_subst hf ..
+
+end map
+
 section substFun
 variable [DecidableEq LF]
 
@@ -352,7 +488,8 @@ theorem Term.fun_var_subst_distrib (i : Idx) (f : LF) (ir fr tr : Term L) : i �
   intro h0
   induction tr with
   | var j =>
-    by_cases h : i = j <;> simp only [subst, h, substFun, ite_cond_eq_true, ite_cond_eq_false]
+    by_cases h : i = j <;>
+    simp only [subst, h, substFun, ite_cond_eq_true, ite_cond_eq_false]
   | app g s h =>
     by_cases h1 : g = f
     · simp only [subst, substFun, h1, ite_cond_eq_true]
@@ -427,7 +564,7 @@ lemma Formula.substFun_FreeFor {i : Idx} {f : LF} {ir fr : Term L} {φ : Formula
 theorem Formula.fun_var_subst_distrib (i : Idx) (f : LF) (ir fr : Term L) (φ : Formula L)
     (h : FreeFor i ir φ) (h1 : i ∉ fr.vars) (hb : fr.vars ∩ φ.bVars = ∅) :
     Formula.substFun fr f (subst i ir φ h) =
-      subst i (Term.substFun fr f ir) (Formula.substFun fr f φ) (substFun_FreeFor h h1 hb) := by
+      subst i (Term.substFun fr f ir) (substFun fr f φ) (substFun_FreeFor h h1 hb) := by
   induction φ with
   | atom p s =>
     simp only [subst, substFun, atom.injEq, heq_eq_eq, true_and]
@@ -451,6 +588,7 @@ theorem Formula.fun_var_subst_distrib (i : Idx) (f : LF) (ir fr : Term L) (φ : 
           exact h' this hb
         · exact h' h3.right hb
 
+/-
 open Finset in
 def Formula.substFunMor (c : LF) (y : Term L) (s : Finset Idx) (h : y.vars ∩ s = ∅) :
     axiomMor (L := L) c s where
@@ -470,7 +608,8 @@ def Formula.substFunMor (c : LF) (y : Term L) (s : Finset Idx) (h : y.vars ∩ s
           apply Finset.notMem_empty i
           exact h ▸ Finset.mem_inter_of_mem this h1
         · simp only [Term.vars, mem_biUnion, mem_univ, true_and, not_exists] at h3 ⊢
-          simp only [Term.vars, biUnion_subset_iff_forall_subset, mem_univ, true_imp_iff] at h4
+          simp only [Term.vars, biUnion_subset_iff_forall_subset,
+            mem_univ, true_imp_iff] at h4
           intro x; exact h5 x (h3 x) (h4 x)
     induction φ with
     | atom p as =>
@@ -503,7 +642,7 @@ def Formula.substFunMor (c : LF) (y : Term L) (s : Finset Idx) (h : y.vars ∩ s
       apply notMem_empty i
       exact h ▸ mem_inter_of_mem this h1
     · apply subset_empty.mp
-      exact h ▸ inter_subset_inter_left h2
+      exact h ▸ inter_subset_inter_left h2-/
 end substFun
 
 section close_formula
@@ -513,10 +652,12 @@ section close_formula
 It takes me quite a while to complete the proof of `close_success` theorem,
   which seemes obvious for human but actually rather complicated to prove in Lean4.
 There might be simpler proof, but anyway, it doesn't matter.
-Honestly speaking, this section is bad implemented, as `Idx` becomes depending on `Nat` property,
+Honestly speaking, this section is bad implemented,
+  as `Idx` becomes depending on `Nat` property,
   but I cannot come up with an easier way.
 Generalized scheme that suits for other Idx type would make the proof more complicated,
-  and I have to spend more time on the index handling, which is not the main topic of this project,
+  and I have to spend more time on the index handling,
+  which is not the main topic of this project,
   at least for now.
 However, the generalization of `Idx` type might not be impossible.
 Seeming dependency on `Nat` property in the following proof only involves the order relation,
@@ -535,7 +676,8 @@ lemma first_element_from_sorted_set_is_outside (set : Finset Nat) (i : Nat)
   simp at hn
   exact hn.left
 
-lemma Formula.quantifier_extract_free_var (i : Idx) (s : List Idx) (h : i ∉ s) (φ : Formula L) :
+lemma Formula.quantifier_extract_free_var
+    (i : Idx) (s : List Idx) (h : i ∉ s) (φ : Formula L) :
     (List.foldr fall (fall i φ) s).fVars = (fall i (List.foldr fall φ s)).fVars := by
   unfold List.foldr
   induction s with

@@ -18,15 +18,15 @@ theorem Term.interpret_termModel (t : Term L) : interpret (TermModel Δ) .var t 
     conv => lhs; arg 0; dsimp only [TermModel]
     congr; funext k; exact h k
 
-def Formula.henkin (i : Idx) (φ : Formula L) (t : Term L) (h : t.isConst) : Formula L :=
-  (¬∀i# φ) → ¬(subst i t φ <| const_FreeFor i φ t h)
+def Formula.henkin (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor i t φ) : Formula L :=
+  (¬∀i# φ) → ¬(subst i t φ h)
 
-class Henkin (Δ : Set (Formula L)) (θ : Formula L -> Term L) : Prop where
+class Henkin (Δ : Set (Formula L)) (θ : Idx -> Formula L -> Term L) : Prop where
   mc : MaximalConsistent Δ
-  pt : ∀ φ : Formula L, Term.isConst (θ φ)
-  ax : ∀ i : Idx, ∀ φ : Formula L, Formula.henkin i φ (θ φ) (pt φ) ∈ Δ
+  pt : ∀ i : Idx, ∀ φ : Formula L, Formula.FreeFor i (θ i φ) φ
+  ax : ∀ i : Idx, ∀ φ : Formula L, Formula.henkin i (θ i φ) φ (pt i φ) ∈ Δ
 
-variable {θ : Formula L -> Term L}
+variable {θ : Idx -> Formula L -> Term L}
 theorem Formula.truth_lemma [hk : Henkin Δ θ] (φ : Formula L) :
     interpret (TermModel Δ) .var φ ↔ φ ∈ Δ := by
   induction hd : φ.depth using Nat.strongRec generalizing φ with
@@ -39,7 +39,7 @@ theorem Formula.truth_lemma [hk : Henkin Δ θ] (φ : Formula L) :
       conv => arg 2; arg 2; intro i; rw [Term.interpret_termModel (s i)]
   | falsum =>
     unfold interpret
-    rw [false_iff ..]
+    rw [false_iff]
     by_contra
     apply hk.mc.left
     exact .asp (α := FOLAxioms L) .falsum this
@@ -64,11 +64,11 @@ theorem Formula.truth_lemma [hk : Henkin Δ θ] (φ : Formula L) :
     unfold interpret; constructor
     · intro h1
       unfold depth at hd
-      have h2 := h1 (θ ψ)
-      have h3 := const_FreeFor i ψ (θ ψ) (hk.pt ψ)
-      rw [←Term.interpret_termModel (Δ := Δ) (θ ψ), ←interpret_subst _ _ h3,
+      have h2 := h1 (θ i ψ)
+      have h3 := hk.pt i ψ
+      rw [←Term.interpret_termModel (Δ := Δ) (θ i ψ), ←interpret_subst _ _ h3,
         h ψ.depth (by omega) _ (subst_depth_eq ..), m] at h2
-      have h4 : ¬ (Δ ⊢ (¬ (subst i (θ ψ) ψ h3))) :=
+      have h4 : ¬ (Δ ⊢ (¬ (subst i (θ i ψ) ψ h3))) :=
         fun h' => hk.mc.left <| .mp h' h2
       have p := hk.ax i ψ
       rw [m] at p
@@ -81,7 +81,6 @@ theorem Formula.truth_lemma [hk : Henkin Δ θ] (φ : Formula L) :
       rw [m] at h6
       exact h4 <| .mp p h6
     · intro p t
-      --let χ := ψ.loose t i
       rw [m] at p
       have ⟨q, r⟩ := Proof.loose_equiv i t ψ
       replace r := Proof.impl_all_intro i r

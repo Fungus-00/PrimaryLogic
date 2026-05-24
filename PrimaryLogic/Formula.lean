@@ -151,8 +151,8 @@ def vars : Term L -> Finset Idx
     fun k => (args k).vars
 
 def funs [DecidableEq LF] : Term L -> Finset LF
-  | .var _ => ∅
-  | .app f s => insert f <|
+  | var _ => ∅
+  | app f s => insert f <|
     (Finset.univ : Finset (Fin (L.funcs f))).biUnion fun k => funs (s k)
 
 def subst (i : Idx) (t : Term L) : Term L -> Term L
@@ -188,10 +188,10 @@ def bVars : Formula L -> Finset Idx
   | fall i φ => insert i (bVars φ)
 
 def funs [DecidableEq LF] : Formula L -> Finset LF
-  | .atom p s => (Finset.univ : Finset (Fin (L.preds p))).biUnion fun k => Term.funs (s k)
-  | .falsum => ∅
-  | .impl φ ψ => funs φ ∪ funs ψ
-  | .fall _ φ => funs φ
+  | atom p s => (Finset.univ : Finset (Fin (L.preds p))).biUnion fun k => Term.funs (s k)
+  | falsum => ∅
+  | impl φ ψ => funs φ ∪ funs ψ
+  | fall _ φ => funs φ
 
 def FreeFor (i : Idx) (t : Term L) : Formula L -> Prop
   | atom .. | falsum => True
@@ -229,21 +229,22 @@ def subst (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t) : Formula
     fall j (ψ.subst i t h')
 
 def substFun [DecidableEq LF] (t : Term L) (f : LF) : Formula L -> Formula L
-  | .atom p s => .atom p fun k => Term.substFun t f (s k)
-  | .falsum => .falsum
-  | .impl φ ψ => .impl (φ.substFun t f) (ψ.substFun t f)
-  | .fall i φ => .fall i (φ.substFun t f)
+  | atom p s => .atom p fun k => Term.substFun t f (s k)
+  | falsum => .falsum
+  | impl φ ψ => .impl (φ.substFun t f) (ψ.substFun t f)
+  | fall i φ => .fall i (φ.substFun t f)
 
-structure axiomMor (L : Lang LF LP) (c : LF) (s : Finset Idx) where
+structure axiomMor (L : Lang LF LP) where
+  ι : Idx -> Idx
   τ : Term L -> Term L
   f : Formula L -> Formula L
   map_falsum : f falsum = falsum
   map_impl : ∀ φ ψ, f (impl φ ψ) = impl (f φ) (f ψ)
-  map_fall : ∀ i φ, f (fall i φ) = fall i (f φ)
-  free_var : ∀ {i}, ∀ {φ : Formula L}, i ∉ φ.fVars → i ∈ s → φ.vars ⊆ s → i ∉ (f φ).fVars
-  free_for : ∀ {i t φ}, FreeFor i t φ → i ∈ s → φ.bVars ⊆ s  → FreeFor i (τ t) (f φ)
-  subst_comm : ∀ {i t φ} h, (h1 : i ∈ s) → (h2 : φ.bVars ⊆ s) →
-    f (subst i t φ h) = subst i (τ t) (f φ) (free_for h h1 h2)
+  map_fall : ∀ i φ, f (fall i φ) = fall (ι i) (f φ)
+  free_var : ∀ {i}, ∀ {φ : Formula L}, i ∉ φ.fVars → (ι i) ∉ (f φ).fVars
+  free_for : ∀ {i t φ}, FreeFor i t φ → FreeFor (ι i) (τ t) (f φ)
+  map_subst : ∀ {i t φ} h, f (subst i t φ h) = subst (ι i) (τ t) (f φ) (free_for h)
+
 end Formula
 
 end subst

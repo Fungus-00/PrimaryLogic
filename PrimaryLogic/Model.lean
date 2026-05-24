@@ -52,13 +52,13 @@ def Mod (Γ : Set (Formula L)) (α : Type) [Inhabited α] := { M : Structure L �
 
 def ModAll (Γ : Set (Formula L)) : Type 1 := Σ (β : Type), Σ (_ : Inhabited β), Mod Γ β
 
-def DefinableSet (M : Structure L α) (φ : Formula L) := { s : Assignment α // φ.interpret M s }
+variable (M : Structure L α)
+def DefinableSet (φ : Formula L) := { s : Assignment α // φ.interpret M s }
 
-def Structure.definableSets (M : Structure L α) : Set (Set (Assignment α)) :=
-  { S | ∃ φ, S = DefinableSet M φ }
+def Structure.definableSets : Set (Set (Assignment α)) := { S | ∃ φ, S = DefinableSet M φ }
 section interpret
 
-lemma Term.interpret_coincidence (M) {x : Term L} {s t : Assignment α} :
+lemma Term.interpret_coincidence {x : Term L} {s t : Assignment α} :
     (∀ i ∈ x.vars, s i = t i) -> x.interpret M s = x.interpret M t := by
   intro hx
   induction x with
@@ -72,8 +72,7 @@ lemma Term.interpret_coincidence (M) {x : Term L} {s t : Assignment α} :
       lhs; arg 3; intro fi
       exact f fi fun i hi => hx i fi hi
 
-lemma Term.interpret_replace_invariance
-    (M) {t : Term L} (s : Assignment α) (a : α) {i : Idx} :
+lemma Term.interpret_replace_invariance {t : Term L} (s : Assignment α) (a : α) {i : Idx} :
     i ∉ t.vars -> t.interpret M (replace s i a) = t.interpret M s := by
   intro hi
   apply interpret_coincidence M
@@ -83,7 +82,7 @@ lemma Term.interpret_replace_invariance
   exfalso
   exact hi hj
 
-theorem Formula.interpret_coincidence (M) {φ : Formula L} (s t : Assignment α) :
+theorem Formula.interpret_coincidence {φ : Formula L} (s t : Assignment α) :
     (∀ i ∈ φ.fVars, s i = t i) -> (φ.interpret M s <-> φ.interpret M t) := by
   intro h
   induction φ generalizing s t with
@@ -110,7 +109,7 @@ theorem Formula.interpret_coincidence (M) {φ : Formula L} (s t : Assignment α)
     conv => lhs; intro a; rw [hi _ _ (this a)]
 
 theorem Formula.interpret_replace_invariance
-    (M : Structure L α) {φ : Formula L} (s : Assignment α) (a : α) {i : Idx} :
+    {φ : Formula L} (s : Assignment α) (a : α) {i : Idx} :
     i ∉ φ.fVars -> (φ.interpret M (replace s i a) <-> φ.interpret M s) := by
   intro hi
   apply interpret_coincidence M
@@ -120,7 +119,7 @@ theorem Formula.interpret_replace_invariance
   exfalso; exact hi hj
 
 /-- Classical needed -/
-theorem Structure.sentence_determinacy (M) (φ : Formula L) : φ.fVars = ∅ ->
+theorem Structure.sentence_determinacy (φ : Formula L) : φ.fVars = ∅ ->
     (∀ s : Assignment α, φ.interpret M s) ∨ (∀ s : Assignment α, ¬ φ.interpret M s) := by
   intro h0
   let s0 : Assignment α := fun _ => Inhabited.default (α := α)
@@ -132,14 +131,14 @@ theorem Structure.sentence_determinacy (M) (φ : Formula L) : φ.fVars = ∅ ->
 /-- The following two theorems show that the sentence makes no essential difference from
   unclosed formula in the sense of semantic level, corresponding to the generalizing theorem
   in the sense of syntax. -/
-theorem Structure.satisfies_gen_elim (M : Structure L α) {Γ} {φ : Formula L} {i : Idx} :
+theorem Structure.satisfies_gen_elim {M : Structure L α} {Γ} {φ : Formula L} {i : Idx} :
     M.satisfies Γ (.fall i φ) -> M.satisfies Γ φ := by
   unfold satisfies
   intro h s h1
   rw [←replace_absorb s i]
   exact (h s h1) (s i)
 
-theorem Structure.satisfies_gen_intro (M : Structure L α) (Γ) (φ : Formula L) (i : Idx) :
+theorem Structure.satisfies_gen_intro (Γ) (φ : Formula L) (i : Idx) :
     (∀ g ∈ Γ, i ∉ g.fVars) -> M.satisfies Γ φ -> M.satisfies Γ (.fall i φ) := by
   intro hg h s h1 a
   have : ∀ g ∈ Γ, Formula.interpret M (replace s i a) g := by
@@ -149,7 +148,7 @@ theorem Structure.satisfies_gen_intro (M : Structure L α) (Γ) (φ : Formula L)
     exact this
   exact h (replace s i a) this
 
-theorem Structure.deduction (M : Structure L α) {Γ} (φ ψ : Formula L) :
+theorem Structure.deduction {Γ} (φ ψ : Formula L) :
     (M.satisfies (Γ.insert φ) ψ) ↔ (M.satisfies Γ (.impl φ ψ)) := by
   constructor
   · intro h s g hg
@@ -164,7 +163,7 @@ theorem Structure.deduction (M : Structure L α) {Γ} (φ ψ : Formula L) :
     simp only [satisfies, Formula.interpret] at h
     exact h s (fun g h1 => hg g (id (.inr h1))) (hg φ (id (.inl rfl)))
 
-lemma Term.interpret_subst (M : Structure L α) (s) {i ti t} :
+lemma Term.interpret_subst (s) {i ti t} :
     interpret M s (subst i ti t) = interpret M (replace s i (ti.interpret M s)) t := by
   induction t with
   | var j =>
@@ -177,7 +176,7 @@ lemma Term.interpret_subst (M : Structure L α) (s) {i ti t} :
     simp only [interpret, subst]
     conv => lhs; arg 3; intro x; rw [h x]
 
-theorem Formula.interpret_subst (M : Structure L α) (s) {i t φ} (h : FreeFor i t φ) :
+theorem Formula.interpret_subst (s) {i t φ} (h : FreeFor i t φ) :
     interpret M s (subst i t φ h) <-> interpret M (replace s i (t.interpret M s)) φ := by
   induction φ generalizing s with
   | atom n ns =>
@@ -203,6 +202,27 @@ theorem Formula.interpret_subst (M : Structure L α) (s) {i t φ} (h : FreeFor i
         conv =>
           lhs; intro a; arg 2; arg 3;
           rw [Term.interpret_replace_invariance M s a h3.left]
+
+theorem Term.interpret_varMap (f : Idx -> Idx) (s) (t : Term L) :
+    interpret M s (varMap f t) = interpret M (s ∘ f) t := by
+  induction t with
+  | var i => unfold varMap interpret; rfl
+  | app n a h => unfold varMap interpret; congr; funext k; apply h
+
+theorem Formula.interpret_varMap (f : Idx -> Idx) (s) (φ : Formula L) :
+    interpret M s (varMap f φ) ↔ interpret M (s ∘ f) φ := by
+  induction φ with
+  | atom n a => unfold varMap interpret; conv => lhs; arg 3; intro i; rw [Term.interpret_varMap]
+  | falsum => rfl
+  | impl x y hx hy => unfold varMap interpret; rw [hx, hy]
+  | fall i ψ h' =>
+    unfold varMap interpret
+    suffices h : ∀ (a : α), interpret M (replace s (f i) a) (varMap f ψ)
+        ↔ interpret M (replace (s ∘ f) i a) ψ from
+      ⟨fun x a => (h a).mp (x a), fun x a => (h a).mpr (x a)⟩
+    intro a
+    sorry
+
 end interpret
 
 end PrimaryLogic

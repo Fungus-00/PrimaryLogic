@@ -54,50 +54,32 @@ macro "∃" i:ident "# " φ:term : term => `(Formula.ex $i $φ)
 abbrev FOLProof := Proof (L := L) (FOLAxioms L)
 infix:20 " ⊢ " => FOLProof
 
-variable {c : LF} {s : Finset Idx} (m : Formula.axiomMor L c s)
+variable (m : Formula.axiomMor L)
 
-def FOLAxioms.transform (a : FOLAxioms L) : a.toFormula.vars ⊆ s → FOLAxioms L :=
-  fun h' => open Formula in match a with
+def FOLAxioms.transform : FOLAxioms L -> FOLAxioms L
   | .h1 φ ψ => .h1 (m.f φ) (m.f ψ)
   | .h2 φ ψ χ => .h2 (m.f φ) (m.f ψ) (m.f χ)
   | .h3 φ => .h3 (m.f φ)
-  | .q1 i φ ψ => .q1 i (m.f φ) (m.f ψ)
-  | .q2 i t φ h =>
-    have h1 : i ∈ s ∧ φ.vars ⊆ s := by
-      simp only [toFormula, vars, Finset.union_subset_iff, Finset.insert_subset_iff] at h'
-      exact h'.left
-    .q2 i (m.τ t) (m.f φ) <| m.free_for h h1.left <|
-      subset_trans (bVars_subset_vars φ) h1.right
-  | .q3 i φ h =>
-    have h1 : i ∈ s ∧ φ.vars ⊆ s := by
-      simp only [toFormula, vars, Finset.union_subset_iff, Finset.insert_subset_iff] at h'
-      exact h'.right
-    .q3 i (m.f φ) (m.free_var h h1.left h1.right)
-  | .gen i a => .gen i <| transform a (by
-    simp only [toFormula, vars, Finset.insert_subset_iff] at h'; exact h'.right)
+  | .q1 i φ ψ => .q1 (m.ι i) (m.f φ) (m.f ψ)
+  | .q2 i t φ h => q2 (m.ι i) (m.τ t) (m.f φ) <| m.free_for h
+  | .q3 i φ h => .q3 (m.ι i) (m.f φ) (m.free_var h)
+  | .gen i a => .gen (m.ι i) <| transform a
 
-theorem FOLAxioms.transform_eq (a : FOLAxioms L) (h' : a.toFormula.vars ⊆ s) :
-    (transform m a h').toFormula = m.f a.toFormula := by
+theorem FOLAxioms.transform_eq (a : FOLAxioms L) :
+    (transform m a).toFormula = m.f a.toFormula := by
   unfold toFormula transform
-  open Formula in
   cases a with
   | h1 φ ψ => dsimp; repeat rw [m.map_impl]
   | h2 φ ψ χ => dsimp; repeat rw [m.map_impl]
   | h3 φ => simp only [m.map_impl, m.map_falsum]
   | q1 i φ ψ => simp only [m.map_impl, m.map_fall]
   | q2 i t φ h =>
-    simp only [m.map_impl, m.map_fall, impl.injEq, true_and];
-    simp only [toFormula, vars, Finset.union_subset_iff, Finset.insert_subset_iff] at h'
-    symm; apply m.subst_comm
-    · exact h'.left.left
-    · trans φ.vars
-      · exact bVars_subset_vars φ
-      · exact h'.left.right
+    simp only [m.map_impl, m.map_fall, Formula.impl.injEq, true_and]
+    symm; apply m.map_subst
   | q3 i φ h => dsimp; rw [m.map_impl, m.map_fall]
   | gen i a =>
-    dsimp; rw [m.map_fall, fall.injEq]
-    simp only [toFormula, vars, Finset.insert_subset_iff] at h'
-    exact ⟨rfl, transform_eq a h'.right⟩
+    dsimp; rw [m.map_fall, Formula.fall.injEq]
+    exact ⟨rfl, transform_eq a⟩
 
 instance : AxiomTransform (FOLAxioms L) m where
   transform := FOLAxioms.transform m

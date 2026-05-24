@@ -50,23 +50,18 @@ def ProofTree.vars {Γ} {φ : Formula L} : ProofTree α Γ φ -> Finset Idx
   | asp .. | axm .. => φ.vars
   | mp px py => vars px ∪ vars py
 
-variable {c : LF} {s : Finset Idx} (m : Formula.axiomMor L c s)
+variable (m : Formula.axiomMor L)
 
 structure AxiomTransform where
-  transform (a : α) : (AxiomSchema.toFormula (L := L) a).vars ⊆ s -> α
-  invariance (a : α) (h : (AxiomSchema.toFormula (L := L) a).vars ⊆ s) :
-    AxiomSchema.toFormula (L := L) (transform a h) = m.f (AxiomSchema.toFormula (L := L) a)
+  transform : α -> α
+  invariance (a : α) :
+    AxiomSchema.toFormula (transform a) = m.f (AxiomSchema.toFormula a)
 
 variable {T : AxiomTransform α m}
-def ProofTree.transform {Γ : Set (Formula L)} {φ : Formula L}
-    (h1 : ∀ ψ ∈ Γ, m.f ψ = ψ) (p : ProofTree α Γ φ) (h2 : p.vars ⊆ s) :
-    ProofTree α Γ (m.f φ) := match p with
-  | .axm a => cast (congrArg (ProofTree α Γ ·) (T.invariance a h2)) <|
-      .axm <| T.transform a h2
-  | .asp ψ h => .asp (m.f ψ) <| (h1 ψ h).symm ▸ h
-  | .mp (φ := x) (ψ := y) px py => .mp
-    (m.map_impl x y ▸ transform h1 px <| Finset.union_subset_left h2)
-    (transform h1 py <| Finset.union_subset_right h2)
+def ProofTree.transform {Γ φ} : ProofTree α Γ φ -> ProofTree α (m.f '' Γ) (m.f φ)
+  | .axm a => cast (congrArg (ProofTree α _ ·) (T.invariance a)) <| .axm <| T.transform a
+  | .asp ψ h => .asp (m.f ψ) (Set.mem_image_of_mem m.f h)
+  | .mp (φ := x) (ψ := y) px py => .mp (m.map_impl x y ▸ transform px) (transform py)
 
 section runtime
 
