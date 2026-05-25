@@ -122,6 +122,15 @@ lemma replace_comm (i j : Idx) (h : i ≠ j) (a b : α) :
 lemma replace_idempotent (i : Idx) (a b : α) :
     replace (replace s i a) i b = replace s i b := by grind
 
+lemma replace_of_map (f : Idx -> Idx) (hf : Function.Injective f) (i : Idx) (a : α) :
+    replace (s ∘ f) i a = replace s (f i) a ∘ f := by
+  unfold replace; funext k; dsimp
+  split_ifs with h1 h2
+  · rfl
+  · exfalso; exact h2 <| congrArg f h1
+  · rename_i h2; exfalso; exact h1 (hf h2)
+  · rfl
+
 end assignment
 
 section freshable
@@ -143,4 +152,45 @@ instance : Freshable Idx where
   )
   fresh_is_new s := Nat.find_spec (p := fun i => i ∉ s) _
 end freshable
+
+section pfun
+
+def PartialInj {α β : Type*} (p : α -> Prop) (f : α -> β) : Prop :=
+  ∀ {x y : α}, p x -> p y -> f x = f y -> x = y
+
+variable {α β : Type*} {p : α -> Prop} {f : α -> β}
+
+namespace PartialInj
+theorem ne (hf : PartialInj p f) {x y : α} : p x → p y → x ≠ y → f x ≠ f y :=
+  fun hx hy => mt fun h => hf hx hy h
+
+theorem mem_finset_image (hf : PartialInj p f) [DecidableEq β] {s : Finset α} {a : α}
+    (hs : ∀ x ∈ s, p x) : p a → (f a ∈ s.image f ↔ a ∈ s) := fun h => by
+  rw [Finset.mem_image]
+  constructor
+  · intro ⟨b, ⟨h1, h2⟩⟩
+    have := hf (hs b h1) h h2
+    rwa [this] at h1
+  · intro ha; use a
+
+theorem image_erase [DecidableEq α] [DecidableEq β] (hf : PartialInj p f) (s : Finset α) (a : α)
+    (hs : ∀ x ∈ s, p x) (ha : p a) : (s.erase a).image f = (s.image f).erase (f a) := by
+  rw [Finset.ext_iff]; intro b
+  rw [Finset.mem_image, Finset.mem_erase]
+  conv => lhs; arg 1; intro; rw [Finset.mem_erase]
+  conv => rhs; arg 2; rw [Finset.mem_image]
+  constructor
+  · intro ⟨x, h1, h2⟩
+    have h3 := ne hf ha (hs x h1.right) h1.left.symm
+    rw [h2] at h3
+    exact ⟨h3.symm, x, h1.right, h2⟩
+  · intro ⟨h1, x, h2, h3⟩
+    use x
+    refine ⟨⟨?_, h2⟩, h3⟩
+    by_contra
+    rw [this] at h3
+    exact h1 h3.symm
+
+end PartialInj
+end pfun
 end PrimaryLogic

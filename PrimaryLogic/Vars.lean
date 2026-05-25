@@ -241,7 +241,46 @@ lemma Term.subst_vars (i : Idx) (s t : Term L) :
     exact Finset.subset_biUnion_of_mem
       (s := @Finset.univ (Fin (L.funcs n)) _) (fun k => (a k).vars) hx
 
-theorem Formula.subst_vars (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor i t φ) :
+theorem Formula.subst_vars {i : Idx} {t : Term L} {φ} (h : FreeFor i t φ) :
+    (subst i t φ h).vars ⊆ t.vars ∪ φ.vars := by
+  open Finset in
+  induction φ with
+  | atom n a =>
+    dsimp [subst, vars];
+    rw [Finset.biUnion_subset_iff_forall_subset]
+    intro x hx
+    apply subset_trans (Term.subst_vars ..)
+    apply union_subset_union_right
+    apply subset_trans (Finset.erase_subset ..)
+    exact subset_biUnion_of_mem
+      (s := @Finset.univ (Fin (L.preds n)) _) (fun k => (a k).vars) hx
+  | falsum => dsimp [subst, fVars]; apply subset_union_right
+  | impl x y hx hy =>
+    dsimp [subst, vars]
+    unfold FreeFor at h
+    conv =>
+      rhs; rw [←union_self t.vars, ←union_assoc]
+      conv => lhs; rw [union_assoc, union_comm]
+      rw [union_assoc]
+    apply union_subset_union
+    · exact hx h.left
+    · exact hy h.right
+  | fall j ψ h' =>
+    dsimp [subst, vars]
+    split_ifs with hij
+    · dsimp [vars]; apply subset_union_right
+    · dsimp [vars]
+      unfold FreeFor at h
+      replace h := Or.resolve_left h hij
+      rcases h with h1 | h2
+      · rw [subst_invariance _ h1]
+        apply subset_union_right
+      · rw [union_insert, insert_subset_iff]
+        refine ⟨mem_insert_self .., ?_⟩
+        apply subset_trans (h' h2.right)
+        apply subset_insert
+
+theorem Formula.subst_fvars (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor i t φ) :
     (subst i t φ h).fVars ⊆ t.vars ∪ (φ.fVars.erase i) := by
   open Finset in
   induction φ with
@@ -251,7 +290,7 @@ theorem Formula.subst_vars (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor 
     intro x hx
     apply subset_trans <| Term.subst_vars ..
     apply union_subset_union_right
-    apply Finset.erase_subset_erase
+    apply erase_subset_erase
     exact subset_biUnion_of_mem
       (s := @univ (Fin (L.preds n)) _) (fun k => (a k).vars) hx
   | falsum => dsimp [subst, fVars]; apply subset_union_right
@@ -262,7 +301,7 @@ theorem Formula.subst_vars (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor 
       rhs; rw [←union_self t.vars, erase_union_distrib, ←union_assoc]
       conv => lhs; rw [union_assoc, union_comm]
       rw [union_assoc]
-    apply Finset.union_subset_union
+    apply union_subset_union
     · exact hx h.left
     · exact hy h.right
   | fall j ψ h' =>
@@ -301,7 +340,7 @@ lemma Formula.FreeFor_subst (i j : Idx) (t s : Term L) (φ : Formula L)
         replace hj := Or.resolve_left hj hjk
         left
         apply Finset.not_mem_subset (t := s.vars ∪ ψ.fVars)
-        · apply subset_trans (subst_vars ..)
+        · apply subset_trans (subst_fvars ..)
           apply Finset.union_subset_union_right
           apply Finset.erase_subset
         · rw [Finset.notMem_union]; exact ⟨h, h2⟩
@@ -346,29 +385,31 @@ theorem Formula.loose_depth_eq (i : Idx) (t : Term L) (φ : Formula L) :
 
 section map
 
-class SplitVars (f g : Idx -> Idx) : Prop where
-  left : Function.Injective f
-  right : Function.Injective g
-  range_disjoint : ∀ x y, f x ≠ g y
+abbrev Term.av (t : Term L) (p : Idx → Prop) : Prop := ∀ i ∈ t.vars, p i
+abbrev Formula.av (φ : Formula L) (p : Idx → Prop) : Prop := ∀ i ∈ φ.vars, p i
 
-instance : SplitVars (· * 2) (· * 2 + 1) where
-  left := by unfold Function.Injective Idx; intro a b h; dsimp at h; omega
-  right := by unfold Function.Injective Idx; intro a b h; dsimp at h; omega
-  range_disjoint := by unfold Idx; intro a b; omega
-
-variable (f : Idx -> Idx)
-
-def Term.varMap : Term L -> Term L
+variable (p : Idx -> Prop) (f : Idx -> Idx)
+def Term.varMap (t : Term L) (hi : t.av p) : Term L :=
+  match t with
   | var i => .var (f i)
-  | app n s => .app n fun k => varMap (s k)
+  | app n s => .app n fun k => varMap (s k) fun j hj => hi j <| by
+    simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and]; exact ⟨k, hj⟩
 
-def Formula.varMap : Formula L -> Formula L
-  | atom n s => atom n fun k => Term.varMap f (s k)
+def Formula.varMap (φ : Formula L) (hi : φ.av p) : Formula L :=
+  match φ with
+  | atom n s => atom n fun k => Term.varMap p f (s k) fun j hj => by
+    apply hi; simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and]; exact ⟨k, hj⟩
   | falsum => falsum
-  | impl φ ψ => impl (varMap φ) (varMap ψ)
-  | fall i φ => fall (f i) (varMap φ)
+  | impl ψ χ => impl
+    (varMap ψ fun j hj => by apply hi; unfold vars; rw [Finset.mem_union]; left; exact hj)
+    (varMap χ fun j hj => by apply hi; unfold vars; rw [Finset.mem_union]; right; exact hj)
+  | fall i ψ => fall (f i) <| varMap ψ fun j hj => by
+    apply hi; unfold vars; exact Finset.mem_insert_of_mem hj
 
-lemma Term.varMap_vars (t : Term L) : (varMap f t).vars = t.vars.image f := by
+variable {p : Idx -> Prop} {f : Idx -> Idx}
+
+lemma Term.varMap_vars (t : Term L) (hi : t.av p) :
+    (varMap p f t hi).vars = t.vars.image f := by
   induction t with
   | var i => unfold varMap vars; rw [Finset.image_singleton]
   | app n s h =>
@@ -377,7 +418,8 @@ lemma Term.varMap_vars (t : Term L) : (varMap f t).vars = t.vars.image f := by
     dsimp
     conv => lhs; arg 2; intro k; rw [h k]
 
-lemma Formula.varMap_vars (φ : Formula L) : (varMap f φ).vars = φ.vars.image f := by
+lemma Formula.varMap_vars (φ : Formula L) (hi : φ.av p) :
+    (varMap p f φ hi).vars = φ.vars.image f := by
   induction φ with
   | atom n s =>
     unfold varMap vars
@@ -392,8 +434,8 @@ lemma Formula.varMap_vars (φ : Formula L) : (varMap f φ).vars = φ.vars.image 
     unfold varMap vars
     rw [Finset.image_insert, h]
 
-lemma Formula.varMap_fVars {f : Idx -> Idx} (hf : Function.Injective f) (φ : Formula L) :
-    (varMap f φ).fVars = φ.fVars.image f := by
+lemma Formula.varMap_fVars {φ : Formula L} (hf : PartialInj p f) (hi : φ.av p) :
+    (varMap p f φ hi).fVars = φ.fVars.image f := by
   induction φ with
   | atom n s =>
     unfold varMap fVars
@@ -406,28 +448,40 @@ lemma Formula.varMap_fVars {f : Idx -> Idx} (hf : Function.Injective f) (φ : Fo
     rw [Finset.image_union, hx, hy]
   | fall i ψ h =>
     unfold varMap fVars
-    rw [Finset.image_erase hf, h]
+    rw [PartialInj.image_erase hf, h]
+    · intro x hx
+      apply hi x
+      unfold vars; rw [Finset.mem_insert]; right
+      apply Finset.mem_of_subset (fVars_subset_vars ..) hx
+    · apply hi
+      unfold vars;
+      apply Finset.mem_insert_self
 
-lemma Term.varMap_subst {f : Idx -> Idx} (hf : Function.Injective f) (i : Idx) (t s : Term L) :
-    (s.subst i t).varMap f = (s.varMap f).subst (f i) (t.varMap f) := by
+lemma Term.varMap_subst (hf : PartialInj p f) (i : Idx) (t s : Term L)
+    (pi : p i) (ht : t.av p) (hs : s.av p) :
+    (s.subst i t).varMap p f (fun j hj => Or.elim
+      (Finset.mem_union.mp <| Finset.mem_of_subset (subst_vars ..) hj)
+      (hs j ·) (ht j <| Finset.mem_of_mem_erase ·))
+    = (s.varMap p f hs).subst (f i) (t.varMap p f ht) := by
   induction t with
   | var j =>
     conv => rhs; arg 3; unfold varMap
     conv => lhs; unfold subst
     split_ifs with h
-    · rw [h]; simp only [subst, ↓reduceIte]
-    · have := Function.Injective.ne hf h
+    · conv => rhs; rw [h]
+      simp only [subst, ↓reduceIte]
+    · have := hf.ne pi (ht j (Finset.mem_singleton_self ..)) h
       simp only [subst, this, ↓reduceIte]
       unfold varMap
       rfl
   | app n args h =>
     simp only [subst, varMap]
     congr; funext k
-    exact h k
+    apply h k
 
-lemma Formula.varMap_FreeFor {f : Idx -> Idx} (hf : Function.Injective f)
-    (i : Idx) (t : Term L) (φ : Formula L) :
-    φ.FreeFor i t ↔ (varMap f φ).FreeFor (f i) (t.varMap f) := by
+lemma Formula.varMap_FreeFor (hf : PartialInj p f) {i : Idx} {t : Term L} {φ : Formula L}
+    (pi : p i) (hi : φ.av p) (ht : t.av p) :
+    φ.FreeFor i t ↔ (varMap p f φ hi).FreeFor (f i) (t.varMap p f ht) := by
   induction φ with
   | atom | falsum => dsimp only [FreeFor, varMap]; rfl
   | impl x y hx hy => dsimp [FreeFor, varMap]; rw [hx, hy]
@@ -436,47 +490,100 @@ lemma Formula.varMap_FreeFor {f : Idx -> Idx} (hf : Function.Injective f)
     rw [←h']
     by_cases h : i = j
     · simp only [h, true_or]
-    · simp only [h, false_or, hf.ne h, Term.varMap_vars, Finset.mem_image, not_exists, not_and]
-      rw [varMap_fVars hf, hf.mem_finset_image]
+    · unfold av vars at hi
+      conv at hi => intro _; lhs; rw [Finset.mem_insert]
+      have hij : f i ≠ f j := hf.ne pi (hi j (Or.inl rfl)) h
+      simp only [h, false_or, hij, Term.varMap_vars, Finset.mem_image, not_exists, not_and]
+      have h1 := varMap_fVars hf (fun k hk => hi k (Or.inr hk))
+      have h2 := fun k hk => hi k <| Or.inr <| Finset.mem_of_subset (fVars_subset_vars _) hk
+      rw [h1, hf.mem_finset_image h2 pi]
       suffices x : (∀ x ∈ t.vars, ¬f x = f j) ↔ j ∉ t.vars from by rw [x]
       constructor
-      · intro h2; by_contra
-        exact h2 j this rfl
-      · intro h2 k hk; by_contra
-        have h3 := hf.eq_iff.mp this
-        rw [h3] at hk
-        exact h2 hk
+      · intro h3; by_contra
+        exact h3 j this rfl
+      · intro h3 k hk; by_contra
+        have h4 := hf (ht k hk) (hi j (Or.inl rfl)) this
+        rw [h4] at hk
+        exact h3 hk
 
-lemma Formula.varMap_subst {f : Idx -> Idx} (hf : Function.Injective f)
-    (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t) :
-    (φ.subst i t h).varMap f = (varMap f φ).subst (f i) (t.varMap f) (by
-      rw [←Formula.varMap_FreeFor hf]; exact h) := by
+lemma Formula.varMap_subst (hf : PartialInj p f) {i : Idx} {t : Term L} {φ : Formula L}
+    (h : φ.FreeFor i t) (pi : p i) (hi : φ.av p) (ht : t.av p) :
+    (φ.subst i t h).varMap p f (fun j hj => Or.elim
+      (Finset.mem_union.mp <| Finset.mem_of_subset (subst_vars h) hj) (ht j ·) (hi j ·))
+    = (varMap p f φ hi).subst (f i) (t.varMap p f ht) (by
+      rw [←Formula.varMap_FreeFor hf pi hi ht]; exact h) := by
   induction φ with
   | atom n s =>
     dsimp [subst, varMap]
     congr; funext k
     apply Term.varMap_subst hf
+    exact pi
   | falsum => rfl
   | impl x y hx hy => dsimp [subst, varMap]; rw [hx h.left, hy h.right]
   | fall j ψ h' =>
     dsimp [Formula.subst, Formula.varMap]
-    split_ifs with h1 h2
-    · conv => lhs; unfold varMap
-    · exfalso; exact h2 (congrArg f h1)
-    · rename_i h2; exfalso; exact h1 <| hf.eq_iff.mp h2
-    · conv => lhs; unfold varMap
-      congr; apply h'
+    split_ifs with h1
+    · simp only [h1, ↓reduceDIte, varMap]
+    · unfold av vars at hi
+      conv at hi => intro _; rw [Finset.mem_insert]
+      have := hf.ne pi (hi j <| Or.inl rfl) h1
+      simp only [this, ↓reduceDIte, varMap]
+      congr
+      unfold FreeFor at h
+      simp [h1] at h
+      apply h'
 
-def Formula.varMap_mor {f : Idx -> Idx} (hf : Function.Injective f) : axiomMor L where
-  ι := f
-  τ := Term.varMap f
-  f := Formula.varMap f
+structure VarContext (L : Lang LF LP) (p : Idx → Prop) where
+  i : Idx
+  t : Term L
+  φ : Formula L
+  ψ : Formula L
+  hi : p i
+  ht : t.av p
+  hx : φ.av p
+  hy : ψ.av p
+
+structure Mor (L : Lang LF LP) where
+  p : Idx -> Prop
+  ι (i : Idx) : p i -> Idx
+  τ (t : Term L) : t.av p -> Term L
+  f : (φ : Formula L) -> φ.av p -> Formula L
+
+open Formula Finset in
+structure MorAx (m : Mor L) (c : VarContext L m.p) : Prop where
+  map_falsum : m.f falsum (False.elim <| notMem_empty · ·) = falsum
+  map_impl :
+      m.f (impl c.φ c.ψ) (fun j h => Or.elim (mem_union.mp h) (c.hx j ·) (c.hy j ·))
+    = impl (m.f c.φ c.hx) (m.f c.ψ c.hy)
+  map_fall :
+      m.f (fall c.i c.φ) (fun j h => Or.elim (mem_insert.mp h) (· ▸ c.hi) (c.hx j ·))
+    = fall (m.ι c.i c.hi) (m.f c.φ c.hx)
+  free_var : c.i ∉ c.φ.fVars → (m.ι c.i c.hi) ∉ (m.f c.φ c.hx).fVars
+  free_for : FreeFor c.i c.t c.φ → FreeFor (m.ι c.i c.hi) (m.τ c.t c.ht) (m.f c.φ c.hx)
+  map_subst (h) :
+      m.f (subst c.i c.t c.φ h) (fun j e => Or.elim
+        (mem_union.mp <| mem_of_subset (subst_vars h) e) (c.ht j ·) (c.hx j ·))
+    = subst (m.ι c.i c.hi) (m.τ c.t c.ht) (m.f c.φ c.hx) (free_for h)
+
+def Formula.varMor (p : Idx → Prop) (f : Idx → Idx) (L : Lang LF LP) : Mor L where
+  p := p
+  ι i _ := f i
+  τ := Term.varMap p f
+  f := Formula.varMap p f
+
+def Formula.varMorAx (p : Idx → Prop) (f : Idx → Idx) (hf : PartialInj p f)
+  (c : VarContext L p) : MorAx (varMor p f L) c where
   map_falsum := rfl
-  map_impl φ ψ := rfl
-  map_fall i φ := rfl
-  free_var h := by rw [varMap_fVars hf, Function.Injective.mem_finset_image hf]; exact h
-  free_for h := (varMap_FreeFor hf ..).mp h
-  map_subst h := varMap_subst hf ..
+  map_impl := rfl
+  map_fall := rfl
+  free_var h := by
+    dsimp [varMor]
+    have : ∀ i ∈ c.φ.fVars, p i := fun i h =>
+      c.hx i <| Finset.mem_of_subset (fVars_subset_vars ..) h
+    rw [varMap_fVars hf c.hx, hf.mem_finset_image this c.hi]
+    exact h
+  free_for h := (varMap_FreeFor hf c.hi c.hx c.ht).mp h
+  map_subst h := varMap_subst hf h c.hi c.hx c.ht
 
 end map
 
@@ -588,61 +695,6 @@ theorem Formula.fun_var_subst_distrib (i : Idx) (f : LF) (ir fr : Term L) (φ : 
           exact h' this hb
         · exact h' h3.right hb
 
-/-
-open Finset in
-def Formula.substFunMor (c : LF) (y : Term L) (s : Finset Idx) (h : y.vars ∩ s = ∅) :
-    axiomMor (L := L) c s where
-  τ := Term.substFun y c
-  f := Formula.substFun y c
-  map_falsum := rfl
-  map_impl := fun _ _ => rfl
-  map_fall := fun _ _ => rfl
-  free_var := fun {i φ} h0 h1 h2 => by
-    have : ∀ t : Term L, i ∉ t.vars → t.vars ⊆ s → i ∉ (Term.substFun y c t).vars :=
-      fun t h3 h4 => by induction t with
-      | var j => unfold Term.substFun; exact h3
-      | app g as h5 =>
-        unfold Term.substFun
-        split_ifs
-        · by_contra
-          apply Finset.notMem_empty i
-          exact h ▸ Finset.mem_inter_of_mem this h1
-        · simp only [Term.vars, mem_biUnion, mem_univ, true_and, not_exists] at h3 ⊢
-          simp only [Term.vars, biUnion_subset_iff_forall_subset,
-            mem_univ, true_imp_iff] at h4
-          intro x; exact h5 x (h3 x) (h4 x)
-    induction φ with
-    | atom p as =>
-      simp only [vars, biUnion_subset_iff_forall_subset, mem_univ, true_imp_iff] at h2
-      simp only [substFun, fVars, mem_biUnion, mem_univ, not_exists,
-        not_and, true_imp_iff] at h0 ⊢
-      intro x; exact this (as x) (h0 x) (h2 x)
-    | falsum => unfold substFun fVars; exact notMem_empty i
-    | impl x z hx hz =>
-      unfold fVars at h0; unfold vars at h2
-      unfold substFun fVars
-      rw [union_subset_iff] at h2
-      rw [notMem_union] at h0 ⊢
-      exact ⟨hx h0.left h2.left, hz h0.right h2.right⟩
-    | fall j x hx =>
-      simp only [substFun, fVars, mem_erase, not_and]
-      simp only [fVars, mem_erase, not_and] at h0
-      simp only [vars, insert_subset_iff] at h2
-      intro h3; exact hx (h0 h3) h2.right
-  free_for := fun {i t φ} h0 h1 h2 => by
-    apply substFun_FreeFor h0
-    · by_contra
-      apply notMem_empty i
-      exact h ▸ mem_inter_of_mem this h1
-    · apply subset_empty.mp
-      exact h ▸ inter_subset_inter_left h2
-  subst_comm := fun {i t φ} h0 h1 h2 => by
-    apply Formula.fun_var_subst_distrib
-    · by_contra
-      apply notMem_empty i
-      exact h ▸ mem_inter_of_mem this h1
-    · apply subset_empty.mp
-      exact h ▸ inter_subset_inter_left h2-/
 end substFun
 
 section close_formula

@@ -1,4 +1,4 @@
-import PrimaryLogic.Formula
+import PrimaryLogic.Vars
 
 namespace PrimaryLogic
 
@@ -50,19 +50,23 @@ def ProofTree.vars {Γ} {φ : Formula L} : ProofTree α Γ φ -> Finset Idx
   | asp .. | axm .. => φ.vars
   | mp px py => vars px ∪ vars py
 
-variable (m : Formula.axiomMor L)
+variable (m : Mor L) (c : VarContext L m.p)
 
 structure AxiomTransform where
-  transform : α -> α
-  invariance (a : α) :
-    AxiomSchema.toFormula (transform a) = m.f (AxiomSchema.toFormula a)
+  pass : α → Prop
+  transform : α → α
+  pass_valid : ∀ a : α, pass a ↔ (AxiomSchema.toFormula (L := L) a).av m.p
+  invariance (a : α) (ha : pass a) :
+      AxiomSchema.toFormula (L := L) (transform a)
+    = m.f (AxiomSchema.toFormula (L := L) a) ((pass_valid a).mp ha)
 
+/-
 variable {T : AxiomTransform α m}
 def ProofTree.transform {Γ φ} : ProofTree α Γ φ -> ProofTree α (m.f '' Γ) (m.f φ)
-  | .axm a => cast (congrArg (ProofTree α _ ·) (T.invariance a)) <| .axm <| T.transform a
-  | .asp ψ h => .asp (m.f ψ) (Set.mem_image_of_mem m.f h)
-  | .mp (φ := x) (ψ := y) px py => .mp (m.map_impl x y ▸ transform px) (transform py)
-
+  | axm a => cast (congrArg (ProofTree α _ ·) (T.invariance a)) <| .axm <| T.transform a
+  | asp ψ h => .asp (m.f ψ) (Set.mem_image_of_mem m.f h)
+  | mp (φ := x) (ψ := y) px py => .mp (m.map_impl x y ▸ transform px) (transform py)
+-/
 section runtime
 
 inductive ProofType : Type

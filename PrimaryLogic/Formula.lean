@@ -234,21 +234,8 @@ def substFun [DecidableEq LF] (t : Term L) (f : LF) : Formula L -> Formula L
   | impl φ ψ => .impl (φ.substFun t f) (ψ.substFun t f)
   | fall i φ => .fall i (φ.substFun t f)
 
-structure axiomMor (L : Lang LF LP) where
-  ι : Idx -> Idx
-  τ : Term L -> Term L
-  f : Formula L -> Formula L
-  map_falsum : f falsum = falsum
-  map_impl : ∀ φ ψ, f (impl φ ψ) = impl (f φ) (f ψ)
-  map_fall : ∀ i φ, f (fall i φ) = fall (ι i) (f φ)
-  free_var : ∀ {i}, ∀ {φ : Formula L}, i ∉ φ.fVars → (ι i) ∉ (f φ).fVars
-  free_for : ∀ {i t φ}, FreeFor i t φ → FreeFor (ι i) (τ t) (f φ)
-  map_subst : ∀ {i t φ} h, f (subst i t φ h) = subst (ι i) (τ t) (f φ) (free_for h)
-
 end Formula
-
 end subst
-
 
 def Formula.close (φ : Formula L) : Formula L :=
   φ.fVars.sort.foldr fall φ

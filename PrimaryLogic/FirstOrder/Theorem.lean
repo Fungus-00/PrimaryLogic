@@ -195,7 +195,7 @@ theorem loose_equiv (i : Idx) (t : Term L) (φ : Formula L) :
         rw [Finset.mem_erase, not_and]
         intro hjk
         unfold χ'
-        apply Finset.not_mem_subset (subst_vars ..)
+        apply Finset.not_mem_subset (subst_fvars ..)
         unfold Term.vars
         rw [Finset.mem_union, not_or, Finset.mem_singleton]
         exact ⟨hjk, Finset.notMem_erase _ _⟩

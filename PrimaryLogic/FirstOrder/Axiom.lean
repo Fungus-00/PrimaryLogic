@@ -53,7 +53,7 @@ macro "∀" i:ident "# " φ:term : term => `(Formula.fall $i $φ)
 macro "∃" i:ident "# " φ:term : term => `(Formula.ex $i $φ)
 abbrev FOLProof := Proof (L := L) (FOLAxioms L)
 infix:20 " ⊢ " => FOLProof
-
+/-
 variable (m : Formula.axiomMor L)
 
 def FOLAxioms.transform : FOLAxioms L -> FOLAxioms L
@@ -84,5 +84,5 @@ theorem FOLAxioms.transform_eq (a : FOLAxioms L) :
 instance : AxiomTransform (FOLAxioms L) m where
   transform := FOLAxioms.transform m
   invariance := FOLAxioms.transform_eq m
-
+-/
 end PrimaryLogic

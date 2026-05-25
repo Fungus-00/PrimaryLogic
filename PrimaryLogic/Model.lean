@@ -1,4 +1,3 @@
-import PrimaryLogic.Formula
 import PrimaryLogic.Vars
 
 namespace PrimaryLogic
@@ -202,27 +201,63 @@ theorem Formula.interpret_subst (s) {i t φ} (h : FreeFor i t φ) :
         conv =>
           lhs; intro a; arg 2; arg 3;
           rw [Term.interpret_replace_invariance M s a h3.left]
-
-theorem Term.interpret_varMap (f : Idx -> Idx) (s) (t : Term L) :
+/-
+lemma Term.interpret_varMap (f : Idx -> Idx) (s) (t) :
     interpret M s (varMap f t) = interpret M (s ∘ f) t := by
   induction t with
   | var i => unfold varMap interpret; rfl
   | app n a h => unfold varMap interpret; congr; funext k; apply h
 
-theorem Formula.interpret_varMap (f : Idx -> Idx) (s) (φ : Formula L) :
+lemma Formula.interpret_varMap {f : Idx -> Idx} (hf : Function.Injective f) (s) (φ) :
     interpret M s (varMap f φ) ↔ interpret M (s ∘ f) φ := by
-  induction φ with
+  induction φ generalizing s with
   | atom n a => unfold varMap interpret; conv => lhs; arg 3; intro i; rw [Term.interpret_varMap]
   | falsum => rfl
-  | impl x y hx hy => unfold varMap interpret; rw [hx, hy]
+  | impl x y hx hy => unfold varMap interpret; rw [hx s, hy s]
   | fall i ψ h' =>
     unfold varMap interpret
     suffices h : ∀ (a : α), interpret M (replace s (f i) a) (varMap f ψ)
         ↔ interpret M (replace (s ∘ f) i a) ψ from
       ⟨fun x a => (h a).mp (x a), fun x a => (h a).mpr (x a)⟩
     intro a
-    sorry
+    rw [replace_of_map s f hf]
+    apply h'
+/-
+lemma Formula.interpret_varMapl {f : Idx -> Idx} (s) (φ) :
+    interpret M (s ∘ f) φ -> interpret M s (varMap f φ) := by
+  intro h
+  induction φ generalizing s with
+  | atom n a =>
+    unfold varMap interpret; unfold interpret at h
+    conv at h => arg 3; intro i; rw [←Term.interpret_varMap]
+    exact h
+  | falsum => unfold varMap interpret; exact h
+  | impl x y hx hy =>
+    unfold varMap interpret; unfold interpret at h
+    intro h'
+-/
+lemma Structure.satisfies_varMap_inj {f : Idx -> Idx} (hf : Function.Injective f)
+    (M : Structure L α) (Γ : Set (Formula L)) (φ : Formula L) :
+    M.satisfies Γ φ -> M.satisfies ((Formula.varMap f) '' Γ) (Formula.varMap f φ) := by
+  intro h s ψ
+  rw [Formula.interpret_varMap M hf]
+  apply h
+  intro χ h'
+  rw [←Formula.interpret_varMap M hf]
+  exact ψ _ (Set.mem_image_of_mem _ h')
 
+lemma Structure.satisfies_varMap_linv {f : Idx -> Idx} (hf : Function.HasLeftInverse f)
+    (M : Structure L α) (Γ : Set (Formula L)) (φ : Formula L) :
+    M.satisfies ((Formula.varMap f) '' Γ) (Formula.varMap f φ) -> M.satisfies Γ φ := by
+  intro h s ψ
+  obtain ⟨g, hg⟩ := hf
+  rw [←Function.comp_id s, ←hg.id, ←Function.comp_assoc, ←Formula.interpret_varMap M hg.injective]
+  have := h (s ∘ g) (by sorry)
+  apply h
+  intro χ h'
+  --rw [←Formula.interpret_varMap M]
+  sorry
+-/
 end interpret
 
 end PrimaryLogic
