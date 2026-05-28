@@ -147,8 +147,12 @@ section subst
 namespace Term
 def vars : Term L -> Finset Idx
   | var i => {i}
-  | app n args => (Finset.univ : Finset (Fin (L.funcs n))).biUnion
-    fun k => (args k).vars
+  | app n s => (Finset.univ : Finset (Fin (L.funcs n))).biUnion
+    fun k => (s k).vars
+
+def varList : Term L -> List Idx
+  | var i => [i]
+  | app n s => (List.finRange (L.funcs n)).flatMap fun k => (s k).varList
 
 def funs [DecidableEq LF] : Term L -> Finset LF
   | var _ => ∅
@@ -167,12 +171,17 @@ end Term
 
 namespace Formula
 def vars : Formula L -> Finset Idx
-  | atom n args =>
-    (Finset.univ : Finset (Fin (L.preds n))).biUnion
-      fun k => (args k).vars
+  | atom n s =>
+    (Finset.univ : Finset (Fin (L.preds n))).biUnion fun k => (s k).vars
   | falsum => ∅
   | impl φ ψ => φ.vars ∪ ψ.vars
   | fall i φ => insert i φ.vars
+
+def varList : Formula L -> List Idx
+  | atom n s => (List.finRange (L.preds n)).flatMap fun k => (s k).varList
+  | falsum => []
+  | impl φ ψ => φ.varList ++ ψ.varList
+  | fall i φ => i :: φ.varList
 
 def fVars : Formula L -> Finset Idx
   | atom n args =>

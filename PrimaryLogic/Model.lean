@@ -201,7 +201,6 @@ theorem Formula.interpret_subst (s) {i t φ} (h : FreeFor i t φ) :
         conv =>
           lhs; intro a; arg 2; arg 3;
           rw [Term.interpret_replace_invariance M s a h3.left]
-/-
 lemma Term.interpret_varMap (f : Idx -> Idx) (s) (t) :
     interpret M s (varMap f t) = interpret M (s ∘ f) t := by
   induction t with
@@ -257,7 +256,6 @@ lemma Structure.satisfies_varMap_linv {f : Idx -> Idx} (hf : Function.HasLeftInv
   intro χ h'
   --rw [←Formula.interpret_varMap M]
   sorry
--/
 end interpret
 
 end PrimaryLogic

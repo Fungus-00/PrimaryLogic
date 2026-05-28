@@ -1,4 +1,5 @@
 import Mathlib.Data.Finset.Basic
+import Mathlib.Data.Finsupp.Basic
 import Mathlib.Data.Finset.Sort
 import Mathlib.Data.Nat.Find
 
@@ -114,13 +115,19 @@ variable {α : Type u} (s : Assignment α)
 abbrev replace (i : Idx) (a : α) :=
   fun k => if k = i then a else s k
 
-lemma replace_absorb (i : Idx) : replace s i (s i) = s := by grind
+lemma replace_absorb (i : Idx) : replace s i (s i) = s :=
+  funext fun k => by unfold replace; split_ifs with h; try rw [h]; rfl
 
 lemma replace_comm (i j : Idx) (h : i ≠ j) (a b : α) :
-    replace (replace s i a) j b = replace (replace s j b) i a := by grind
+    replace (replace s i a) j b = replace (replace s j b) i a := by
+  funext k; unfold replace
+  split_ifs with h1 h2
+  · rw [←h1, ←h2] at h; contradiction
+  repeat rfl
 
 lemma replace_idempotent (i : Idx) (a b : α) :
-    replace (replace s i a) i b = replace s i b := by grind
+    replace (replace s i a) i b = replace s i b := by
+  funext k; unfold replace; split_ifs with h1 <;> rfl
 
 lemma replace_of_map (f : Idx -> Idx) (hf : Function.Injective f) (i : Idx) (a : α) :
     replace (s ∘ f) i a = replace s (f i) a ∘ f := by
@@ -132,6 +139,61 @@ lemma replace_of_map (f : Idx -> Idx) (hf : Function.Injective f) (i : Idx) (a :
   · rfl
 
 end assignment
+
+section list_ceq
+variable {α : Type*}
+
+def _root_.List.ceq (s t : List α) : Prop := ∀ x : α, x ∈ s ↔ x ∈ t
+
+instance : Equivalence (List.ceq (α := α)) where
+  refl := fun _ _ => iff_of_eq rfl
+  symm := fun x y => (x y).symm
+  trans := fun x y z => (x z).trans (y z)
+
+end list_ceq
+
+section fix
+open Std in
+local instance Lx1 {α : Type*} [LE α] [DecidableLE α] [Max α]
+    [LawfulOrderLeftLeaningMax α] : MaxEqOr α where
+  max_eq_or a b := by
+    suffices min_eq : max a b = if b ≤ a then a else b by
+      rw [min_eq]
+      split <;> simp
+    split <;> simp [*, LawfulOrderLeftLeaningMax.max_eq_left,
+      LawfulOrderLeftLeaningMax.max_eq_right]
+
+open List in
+theorem max?_eq_some_iff' {α a} [Max α] [LE α] [DecidableLE α] {xs : List α} [Std.IsLinearOrder (α)]
+    [Std.LawfulOrderMax α] : xs.max? = some a ↔ a ∈ xs ∧ ∀ b, b ∈ xs → b ≤ a := by
+  constructor
+  · intro h; exact ⟨max?_mem h, (max?_le_iff h).1 (Std.le_refl _)⟩
+  · intro ⟨h₁, h₂⟩
+    cases xs with
+    | nil => simp at h₁
+    | cons x xs =>
+      rw [List.max?]
+      exact congrArg some <| Std.le_antisymm
+        (h₂ _ (max?_mem (xs := x :: xs) rfl))
+        ((max?_le_iff (xs := x :: xs) rfl).1 (Std.le_refl _) _ h₁)
+
+theorem eq_nil_iff_forall_not_mem' {α} {l : List α} : l = [] ↔ ∀ a, a ∉ l := by
+  cases l <;> simp only [List.not_mem_nil, not_false_eq_true, implies_true, reduceCtorEq,
+    List.mem_cons, forall_eq_or_imp, imp_false, false_and]
+
+theorem add_eq_left' {a b : Nat} : a + b = a ↔ b = 0 := by
+  constructor
+  · intro h
+    induction a with
+    | zero => rwa [Nat.zero_add] at h
+    | succ n ha =>
+      conv at h =>
+        lhs; rw [add_assoc]
+        conv => rhs; rw [add_comm]
+        rw [←add_assoc]
+      exact ha (add_right_cancel h)
+  · intro h; rw [h]; apply Nat.add_zero
+end fix
 
 section freshable
 class Freshable (α : Type*) [DecidableEq α] where
@@ -151,10 +213,53 @@ instance : Freshable Idx where
       exact Finset.notMem_of_max_lt (a := m+1) (b := m) (by simp) h
   )
   fresh_is_new s := Nat.find_spec (p := fun i => i ∉ s) _
+
+class LFreshable (α : Type*) where
+  fresh : List α → α
+  fresh_is_new : ∀ s, fresh s ∉ s
+  fresh_ceq_invariance : ∀ s t, s.ceq t → fresh s = fresh t
+
+instance : LFreshable Nat where
+  fresh s := match List.max? s with | none => 0 | some n => n.succ
+  fresh_is_new s := by
+    cases h : s with
+    | nil => simp only [List.max?, List.not_mem_nil, not_false_eq_true]
+    | cons a l =>
+      simp only [Nat.succ_eq_add_one, List.mem_cons, not_or, List.max?]
+      constructor
+      · by_cases h': l = []
+        · rw [h']; unfold List.foldl
+          simp only [add_eq_left', one_ne_zero, not_false_eq_true]
+        · rw [List.foldl_max_eq_max h']
+          omega
+      · by_cases h': l = []
+        · rw [h']; unfold List.foldl; simp only [List.not_mem_nil, not_false_eq_true]
+        · rw [List.foldl_max_eq_max h']
+          by_contra
+          have := (List.max_le_iff h').mp (Nat.le_refl _) _ this
+          omega
+  fresh_ceq_invariance s t h := by
+    match hs : s.max?, ht : t.max? with
+    | none, none => rfl
+    | none, some n =>
+      rw [List.max?_eq_none_iff, eq_nil_iff_forall_not_mem'] at hs
+      rw [max?_eq_some_iff'] at ht
+      have h' := (h n).mpr ht.1
+      exfalso; exact hs n h'
+    | some n, none =>
+      rw [List.max?_eq_none_iff, eq_nil_iff_forall_not_mem'] at ht
+      rw [max?_eq_some_iff'] at hs
+      have h' := (h n).mp hs.1
+      exfalso; exact ht n h'
+    | some m, some n =>
+      simp only [Nat.succ_eq_add_one, Nat.add_right_cancel_iff]
+      rw [max?_eq_some_iff'] at hs ht
+      have h1 := ht.2 m <| (h m).mp hs.1
+      have h2 := hs.2 n <| (h n).mpr ht.1
+      exact h1.antisymm h2
 end freshable
 
 section pfun
-
 def PartialInj {α β : Type*} (p : α -> Prop) (f : α -> β) : Prop :=
   ∀ {x y : α}, p x -> p y -> f x = f y -> x = y
 
@@ -192,5 +297,201 @@ theorem image_erase [DecidableEq α] [DecidableEq β] (hf : PartialInj p f) (s :
     exact h1 h3.symm
 
 end PartialInj
+
 end pfun
+
+section List
+def _root_.List.first {α : Type*} [DecidableEq α] (l : List α) (a : α) (h : a ∈ l) : Nat :=
+  match l with
+  | [] => False.elim (List.not_mem_nil h)
+  | b :: s => if h' : a = b then 0 else
+    (first s a (Or.resolve_left (by rwa [List.mem_cons] at h) h')).succ
+
+open List in
+lemma _root_.List.first_valid {α : Type*} [DecidableEq α] {l : List α} {a : α} (h : a ∈ l) :
+    l.first a h < l.length := by
+  induction l with
+  | nil => exfalso; exact not_mem_nil h
+  | cons b s h1 =>
+    unfold first length
+    split_ifs with h2
+    · apply Nat.zero_lt_succ
+    · rw [Nat.succ_eq_add_one, Nat.add_lt_add_iff_right]
+      rw [mem_cons] at h
+      exact h1 <| Or.resolve_left h h2
+
+variable {α : Type*} [DecidableEq α] {p : α → Prop} [DecidablePred p] [LFreshable (Subtype p)]
+
+private def expandP (s : List α × List (Subtype p)) : List α → List α × List (Subtype p)
+  | [] => ⟨[], []⟩
+  | a :: l =>
+    let r := expandP s l;
+    if p a ∨ a ∈ r.1 then r
+    else ⟨a :: r.1, (LFreshable.fresh r.2) :: r.2⟩
+
+private lemma expandP_len (s : List α × List (Subtype p)) (l : List α) :
+    (expandP s l).1.length = (expandP s l).2.length := by
+  induction l with
+  | nil => unfold expandP; rfl
+  | cons a r h =>
+    dsimp [expandP]
+    split_ifs with h'
+    · exact h
+    · dsimp; rw [h]
+
+private lemma expandP_ex (s : List α × List (Subtype p)) {l : List α} {a : α} (h : a ∈ l) :
+    p a ∨ a ∈ (expandP s l).1 := by
+  induction l with
+  | nil => dsimp [expandP]; right; exact h
+  | cons b r h1 =>
+    dsimp [expandP]
+    rw [List.mem_cons] at h
+    split_ifs with h2
+    · rcases h with h3 | h4
+      · subst h3; exact h2
+      · exact h1 h4
+    · dsimp; rw [List.mem_cons]
+      rcases h with h3 | h4
+      · right; left; exact h3
+      · rw [←or_assoc]
+        conv => lhs; rw [or_comm]
+        rw [or_assoc]
+        right
+        exact h1 h4
+
+private lemma expandP_uni1 {s : List α × List (Subtype p)} {l : List α} :
+    let r := (expandP s l).1; {m n : Nat} →
+    ∀ hm : m < r.length, ∀ hn : n < r.length, r[m]'hm = r[n]'hn → m = n :=
+  fun {m n} hm hn hr => by
+  induction l generalizing m n with
+  | nil => exfalso; dsimp [expandP] at hm; exact Nat.not_lt_zero m hm
+  | cons d u h =>
+    dsimp [expandP] at hr
+    split_ifs at hr with h1
+    · have h2 : expandP s (d :: u) = expandP s u := by
+        conv => lhs; unfold expandP; simp [h1]
+      rw [h2] at hm hn
+      exact h hm hn hr
+    · simp only [List.getElem_cons] at hr
+      unfold expandP at hm hn
+      simp only [h1, ↓reduceIte, List.length_cons,
+        Nat.lt_add_one_iff, Nat.le_iff_lt_or_eq] at hm hn
+      split_ifs at hr with h2 h3
+      · rw [h2, h3]
+      · exfalso
+        have h5 := Or.elim hn
+          (Nat.sub_lt_of_lt ·) (fun h' => by rw [←h']; exact Nat.sub_one_lt h3)
+        have h6 := hr.symm ▸ List.getElem_mem h5
+        rw [not_or] at h1
+        exact h1.right h6
+      · by_cases h4 : n = 0
+        · simp only [h4, ↓reduceDIte] at hr
+          exfalso
+          have h5 := Or.elim hm
+            (Nat.sub_lt_of_lt ·) (fun h' => by rw [←h']; exact Nat.sub_one_lt h2)
+          have h6 := hr ▸ List.getElem_mem h5
+          rw [not_or] at h1
+          exact h1.right h6
+        · simp only [h4, ↓reduceDIte] at hr
+          match hm, hn with
+          | .inl hm, .inl hn =>
+            have h5 := Nat.sub_lt_of_lt (b := 1) hm
+            have h6 := Nat.sub_lt_of_lt (b := 1) hn
+            have h7 := h h5 h6 hr
+            omega
+          | .inr hm, .inl hn =>
+            exfalso
+            have h5 := Nat.sub_one_lt h2
+            conv at h5 => rhs; rw [hm]
+            have h6 := Nat.sub_lt_of_lt (b := 1) hn
+            have h7 := h h5 h6 hr
+            rw [←hm] at hn
+            omega
+          | .inl hm, .inr hn =>
+            exfalso
+            have h5 := Nat.sub_one_lt h4
+            conv at h5 => rhs; rw [hn]
+            have h6 := Nat.sub_lt_of_lt (b := 1) hm
+            have h7 := h h6 h5 hr
+            rw [←hn] at hm
+            omega
+          | .inr hm, .inr hn => rw [hm, hn]
+
+private lemma expandP_uni2 {s : List α × List (Subtype p)} {l : List α} :
+    let r := (expandP s l).2; {m n : Nat} →
+    ∀ hm : m < r.length, ∀ hn : n < r.length, r[m]'hm = r[n]'hn → m = n :=
+  fun {m n} hm hn hr => by
+  induction l generalizing m n with
+  | nil => exfalso; dsimp [expandP] at hm; exact Nat.not_lt_zero m hm
+  | cons d u h =>
+    dsimp [expandP] at hr
+    split_ifs at hr with h1
+    · have h2 : expandP s (d :: u) = expandP s u := by
+        conv => lhs; unfold expandP; simp [h1]
+      rw [h2] at hm hn
+      exact h hm hn hr
+    · simp only [List.getElem_cons] at hr
+      unfold expandP at hm hn
+      simp only [h1, ↓reduceIte, List.length_cons,
+        Nat.lt_add_one_iff, Nat.le_iff_lt_or_eq] at hm hn
+      split_ifs at hr with h2 h3
+      · rw [h2, h3]
+      · exfalso
+        have h5 := Or.elim hn
+          (Nat.sub_lt_of_lt ·) (fun h' => by rw [←h']; exact Nat.sub_one_lt h3)
+        have h6 := hr.symm ▸ List.getElem_mem h5
+        exact LFreshable.fresh_is_new _ h6
+      · by_cases h4 : n = 0
+        · simp only [h4, ↓reduceDIte] at hr
+          exfalso
+          have h5 := Or.elim hm
+            (Nat.sub_lt_of_lt ·) (fun h' => by rw [←h']; exact Nat.sub_one_lt h2)
+          have h6 := hr ▸ List.getElem_mem h5
+          exact LFreshable.fresh_is_new _ h6
+        · simp only [h4, ↓reduceDIte] at hr
+          match hm, hn with
+          | .inl hm, .inl hn =>
+            have h5 := Nat.sub_lt_of_lt (b := 1) hm
+            have h6 := Nat.sub_lt_of_lt (b := 1) hn
+            have h7 := h h5 h6 hr
+            omega
+          | .inr hm, .inl hn =>
+            exfalso
+            have h5 := Nat.sub_one_lt h2
+            conv at h5 => rhs; rw [hm]
+            have h6 := Nat.sub_lt_of_lt (b := 1) hn
+            have h7 := h h5 h6 hr
+            rw [←hm] at hn
+            omega
+          | .inl hm, .inr hn =>
+            exfalso
+            have h5 := Nat.sub_one_lt h4
+            conv at h5 => rhs; rw [hn]
+            have h6 := Nat.sub_lt_of_lt (b := 1) hm
+            have h7 := h h6 h5 hr
+            rw [←hn] at hm
+            omega
+          | .inr hm, .inr hn => rw [hm, hn]
+
+def _root_.List.expand (p : α → Prop) [DecidablePred p] [LFreshable (Subtype p)]
+    (l : List α) (a : α) : Subtype p :=
+  if hp : p a then ⟨a, hp⟩
+  else if hl : a ∈ l then
+    let s : List α × List (Subtype p) := expandP ⟨[], []⟩ l
+    s.2[s.1.first a (Or.resolve_left (expandP_ex _ hl) hp)]'
+      (by rw [←expandP_len]; apply List.first_valid)
+  else LFreshable.fresh []
+
+def _root_.List.expand_PartialInj (l : List α) :
+    PartialInj (· ∈ l) (List.expand p l) := fun {x y} hx hy h => by
+  dsimp at hx hy
+  unfold List.expand at h
+  split_ifs at h with h1 h2 h3
+  · exact Subtype.ext_iff.mp h
+  · exfalso; dsimp at h; sorry
+  · exfalso; dsimp at h; sorry
+  · dsimp at h
+    have := expandP_uni2 _ _ h
+    sorry
+end List
 end PrimaryLogic
