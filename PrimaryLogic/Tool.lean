@@ -5,6 +5,18 @@ import Mathlib.Data.Nat.Find
 
 namespace PrimaryLogic
 
+section lem
+
+theorem idn_iff_lem : (∀ p : Prop, ¬¬p → p) ↔ (∀ p : Prop, p ∨ ¬p) where
+  mp hp p := hp (p ∨ ¬p) fun h => h <| .inr fun h' => h (.inl h')
+  mpr h p hp := Or.rec id (fun h' => False.elim (hp h')) (h p)
+
+axiom idn (p : Prop) : ¬¬p → p
+
+lemma or_dec {p : Prop} (e : p ∨ ¬ p) : Nonempty (Decidable p) :=
+  Or.elim e (.intro <| isTrue ·) (.intro <| isFalse ·)
+end lem
+
 section forall_in
 
 def forallInRange (m n : Nat) (p : Nat → Bool) : Bool :=
@@ -301,15 +313,17 @@ end PartialInj
 end pfun
 
 section List
-def _root_.List.first {α : Type*} [DecidableEq α] (l : List α) (a : α) (h : a ∈ l) : Nat :=
+variable {α : Type*} [DecidableEq α]
+
+section first
+def _root_.List.first (l : List α) (a : α) (h : a ∈ l) : Nat :=
   match l with
   | [] => False.elim (List.not_mem_nil h)
   | b :: s => if h' : a = b then 0 else
     (first s a (Or.resolve_left (by rwa [List.mem_cons] at h) h')).succ
 
 open List in
-lemma _root_.List.first_valid {α : Type*} [DecidableEq α] {l : List α} {a : α} (h : a ∈ l) :
-    l.first a h < l.length := by
+lemma _root_.List.first_valid {l : List α} {a : α} (h : a ∈ l) : l.first a h < l.length := by
   induction l with
   | nil => exfalso; exact not_mem_nil h
   | cons b s h1 =>
@@ -320,31 +334,46 @@ lemma _root_.List.first_valid {α : Type*} [DecidableEq α] {l : List α} {a : �
       rw [mem_cons] at h
       exact h1 <| Or.resolve_left h h2
 
-variable {α : Type*} [DecidableEq α] {p : α → Prop} [DecidablePred p] [LFreshable (Subtype p)]
+open List in
+theorem _root_.List.first_get {α : Type*} [DecidableEq α] {l : List α} {a : α} (h : a ∈ l) :
+    l[l.first a h]? = some a := by
+  induction l with
+  | nil => exfalso; exact not_mem_nil h
+  | cons b s h1 =>
+    unfold first
+    split_ifs with h2
+    · simp only [length_cons, Nat.zero_lt_succ, getElem?_pos, getElem_cons_zero, Option.some.injEq]
+      symm; exact h2
+    · simp only [Nat.succ_eq_add_one, getElem?_cons_succ]
+      rw [mem_cons] at h
+      exact h1 (Or.resolve_left h h2)
+end first
 
-private def expandP (s : List α × List (Subtype p)) : List α → List α × List (Subtype p)
-  | [] => ⟨[], []⟩
+section expand
+variable {β : Type*} [LFreshable β]
+private def expand (s : List α × List β) : List α → List α × List β
+  | [] => s
   | a :: l =>
-    let r := expandP s l;
-    if p a ∨ a ∈ r.1 then r
+    let r := expand s l;
+    if a ∈ r.1 then r
     else ⟨a :: r.1, (LFreshable.fresh r.2) :: r.2⟩
 
-private lemma expandP_len (s : List α × List (Subtype p)) (l : List α) :
-    (expandP s l).1.length = (expandP s l).2.length := by
+private lemma expand_len (s : List α × List β) (hs : s.1.length = s.2.length)
+    (l : List α) : (expand s l).1.length = (expand s l).2.length := by
   induction l with
-  | nil => unfold expandP; rfl
+  | nil => unfold expand; exact hs
   | cons a r h =>
-    dsimp [expandP]
+    dsimp [expand]
     split_ifs with h'
     · exact h
     · dsimp; rw [h]
 
-private lemma expandP_ex (s : List α × List (Subtype p)) {l : List α} {a : α} (h : a ∈ l) :
-    p a ∨ a ∈ (expandP s l).1 := by
+private lemma expand_ex (s : List α × List β) {l : List α} {a : α} (h : a ∈ l) :
+    a ∈ (expand s l).1 := by
   induction l with
-  | nil => dsimp [expandP]; right; exact h
+  | nil => exfalso; exact List.not_mem_nil h
   | cons b r h1 =>
-    dsimp [expandP]
+    dsimp [expand]
     rw [List.mem_cons] at h
     split_ifs with h2
     · rcases h with h3 | h4
@@ -352,86 +381,27 @@ private lemma expandP_ex (s : List α × List (Subtype p)) {l : List α} {a : α
       · exact h1 h4
     · dsimp; rw [List.mem_cons]
       rcases h with h3 | h4
-      · right; left; exact h3
-      · rw [←or_assoc]
-        conv => lhs; rw [or_comm]
-        rw [or_assoc]
-        right
+      · left; exact h3
+      · right
         exact h1 h4
 
-private lemma expandP_uni1 {s : List α × List (Subtype p)} {l : List α} :
-    let r := (expandP s l).1; {m n : Nat} →
-    ∀ hm : m < r.length, ∀ hn : n < r.length, r[m]'hm = r[n]'hn → m = n :=
+private lemma expand_uni2 {s : List α × List β} {l : List α}
+    (hs : ∀ {m n : Nat}, ∀ hm : m < s.2.length, ∀ hn : n < s.2.length,
+      s.2[m]'hm = s.2[n]'hn → m = n) :
+    let r := (expand s l).2; ∀ {m n : Nat}, ∀ hm : m < r.length, ∀ hn : n < r.length,
+      r[m]'hm = r[n]'hn → m = n :=
   fun {m n} hm hn hr => by
   induction l generalizing m n with
-  | nil => exfalso; dsimp [expandP] at hm; exact Nat.not_lt_zero m hm
+  | nil => dsimp [expand] at hm hn hr; exact hs hm hn hr
   | cons d u h =>
-    dsimp [expandP] at hr
+    dsimp [expand] at hr
     split_ifs at hr with h1
-    · have h2 : expandP s (d :: u) = expandP s u := by
-        conv => lhs; unfold expandP; simp [h1]
+    · have h2 : expand s (d :: u) = expand s u := by
+        conv => lhs; unfold expand; simp [h1]
       rw [h2] at hm hn
       exact h hm hn hr
     · simp only [List.getElem_cons] at hr
-      unfold expandP at hm hn
-      simp only [h1, ↓reduceIte, List.length_cons,
-        Nat.lt_add_one_iff, Nat.le_iff_lt_or_eq] at hm hn
-      split_ifs at hr with h2 h3
-      · rw [h2, h3]
-      · exfalso
-        have h5 := Or.elim hn
-          (Nat.sub_lt_of_lt ·) (fun h' => by rw [←h']; exact Nat.sub_one_lt h3)
-        have h6 := hr.symm ▸ List.getElem_mem h5
-        rw [not_or] at h1
-        exact h1.right h6
-      · by_cases h4 : n = 0
-        · simp only [h4, ↓reduceDIte] at hr
-          exfalso
-          have h5 := Or.elim hm
-            (Nat.sub_lt_of_lt ·) (fun h' => by rw [←h']; exact Nat.sub_one_lt h2)
-          have h6 := hr ▸ List.getElem_mem h5
-          rw [not_or] at h1
-          exact h1.right h6
-        · simp only [h4, ↓reduceDIte] at hr
-          match hm, hn with
-          | .inl hm, .inl hn =>
-            have h5 := Nat.sub_lt_of_lt (b := 1) hm
-            have h6 := Nat.sub_lt_of_lt (b := 1) hn
-            have h7 := h h5 h6 hr
-            omega
-          | .inr hm, .inl hn =>
-            exfalso
-            have h5 := Nat.sub_one_lt h2
-            conv at h5 => rhs; rw [hm]
-            have h6 := Nat.sub_lt_of_lt (b := 1) hn
-            have h7 := h h5 h6 hr
-            rw [←hm] at hn
-            omega
-          | .inl hm, .inr hn =>
-            exfalso
-            have h5 := Nat.sub_one_lt h4
-            conv at h5 => rhs; rw [hn]
-            have h6 := Nat.sub_lt_of_lt (b := 1) hm
-            have h7 := h h6 h5 hr
-            rw [←hn] at hm
-            omega
-          | .inr hm, .inr hn => rw [hm, hn]
-
-private lemma expandP_uni2 {s : List α × List (Subtype p)} {l : List α} :
-    let r := (expandP s l).2; {m n : Nat} →
-    ∀ hm : m < r.length, ∀ hn : n < r.length, r[m]'hm = r[n]'hn → m = n :=
-  fun {m n} hm hn hr => by
-  induction l generalizing m n with
-  | nil => exfalso; dsimp [expandP] at hm; exact Nat.not_lt_zero m hm
-  | cons d u h =>
-    dsimp [expandP] at hr
-    split_ifs at hr with h1
-    · have h2 : expandP s (d :: u) = expandP s u := by
-        conv => lhs; unfold expandP; simp [h1]
-      rw [h2] at hm hn
-      exact h hm hn hr
-    · simp only [List.getElem_cons] at hr
-      unfold expandP at hm hn
+      unfold expand at hm hn
       simp only [h1, ↓reduceIte, List.length_cons,
         Nat.lt_add_one_iff, Nat.le_iff_lt_or_eq] at hm hn
       split_ifs at hr with h2 h3
@@ -472,26 +442,56 @@ private lemma expandP_uni2 {s : List α × List (Subtype p)} {l : List α} :
             rw [←hn] at hm
             omega
           | .inr hm, .inr hn => rw [hm, hn]
+end expand
 
-def _root_.List.expand (p : α → Prop) [DecidablePred p] [LFreshable (Subtype p)]
+section pass
+variable {p : α → Prop} [DecidablePred p]
+
+private def prePass (p : α → Prop) [DecidablePred p] : List α → List (Subtype p)
+  | [] => []
+  | a :: l => if h : p a then ⟨a, h⟩ :: prePass p l else prePass p l
+
+private def pass (p : α → Prop) [DecidablePred p] (l : List α) : List (Subtype p) :=
+  (prePass p l).dedup
+
+private lemma pass_uni (p : α → Prop) [DecidablePred p] {l : List α} :
+    let s := pass p l; ∀ {m n : Nat}, ∀ hm : m < s.length, ∀ hn : n < s.length,
+    s[m]'hm = s[n]'hn → m = n := fun _ _ h =>
+  Fin.val_inj.mpr <| (List.Nodup.get_inj_iff <| List.nodup_dedup <| prePass p l).mp h
+
+def _root_.List.rejoin (p : α → Prop) [DecidablePred p] [LFreshable (Subtype p)]
     (l : List α) (a : α) : Subtype p :=
-  if hp : p a then ⟨a, hp⟩
-  else if hl : a ∈ l then
-    let s : List α × List (Subtype p) := expandP ⟨[], []⟩ l
-    s.2[s.1.first a (Or.resolve_left (expandP_ex _ hl) hp)]'
-      (by rw [←expandP_len]; apply List.first_valid)
+  if h : a ∈ l then
+    let s := expand (⟨(pass p l).unattach, (pass p l)⟩) l
+    have h1 : a ∈ s.1 := by dsimp [s]; exact expand_ex _ h
+    have h2 : s.1.first a h1 < s.2.length := by
+      dsimp [s]
+      rw [←expand_len]
+      · apply List.first_valid
+      · dsimp; exact List.length_unattach
+    s.2[s.1.first a h1]'h2
   else LFreshable.fresh []
 
-def _root_.List.expand_PartialInj (l : List α) :
-    PartialInj (· ∈ l) (List.expand p l) := fun {x y} hx hy h => by
+variable {p : α → Prop} [DecidablePred p] [LFreshable (Subtype p)]
+
+theorem _root_.List.rejoin_PartialInj (l : List α) :
+    PartialInj (· ∈ l) (List.rejoin p l) := fun {x y} hx hy h => by
   dsimp at hx hy
-  unfold List.expand at h
-  split_ifs at h with h1 h2 h3
-  · exact Subtype.ext_iff.mp h
-  · exfalso; dsimp at h; sorry
-  · exfalso; dsimp at h; sorry
-  · dsimp at h
-    have := expandP_uni2 _ _ h
-    sorry
+  simp only [List.rejoin, hx, ↓reduceDIte, hy] at h
+  have h1 := expand_uni2 (s := ((pass p l).unattach, pass p l))
+    (fun {m n} hm hn h' => by dsimp at hm hn h'; exact pass_uni p hm hn h')
+    (by rw [←expand_len _ (List.length_unattach)]; apply List.first_valid)
+    (by rw [←expand_len _ (List.length_unattach)]; apply List.first_valid)
+    h
+  have h2 := congrArg (fun n => (expand ((pass p l).unattach, pass p l) l).1[n]?) h1
+  dsimp at h2
+  rwa [List.first_get (a := x), List.first_get (a := y), Option.some_inj] at h2
+
+theorem _root_.List.rejoin_invariance (l : List α) (a : α) (hl : a ∈ l) (hp : p a) :
+    l.rejoin p a = ⟨a, hp⟩ := by
+  simp only [List.rejoin, hl, ↓reduceDIte]
+
+  sorry
+end pass
 end List
 end PrimaryLogic

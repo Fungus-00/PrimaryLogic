@@ -1,6 +1,7 @@
 import PrimaryLogic.Encoding
 import PrimaryLogic.Model
 import PrimaryLogic.FirstOrder.Theorem
+import PrimaryLogic.FirstOrder.Soundness
 
 namespace PrimaryLogic
 variable {LF LP : Type} {L : Lang LF LP} (Γ : Set (Formula L))
@@ -26,6 +27,15 @@ theorem maxConSet_iff (Γ : Set (Formula L)) (φ : Formula L) :
 
 private abbrev InCon : Prop := Inconsistent (FOLAxioms L) Γ
 private abbrev Con : Prop := Consistent (FOLAxioms L) Γ
+
+lemma con_empty : Con (L := L) ∅ := by
+  unfold Con Consistent Inconsistent
+  by_contra
+  have h1 := soundness _ _ this
+  have h2 := h1 Unit ⟨fun _ _ => .unit, fun _ _ => False⟩ (fun _ => .unit)
+    fun x h => False.elim <| Set.notMem_empty x h
+  unfold Formula.interpret at h2
+  exact h2
 
 variable [Encodable LF] [Encodable LP]
 
