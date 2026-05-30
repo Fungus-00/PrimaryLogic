@@ -440,7 +440,7 @@ lemma Formula.varMap_vars (φ : Formula L) :
     unfold varMap vars
     rw [Finset.image_insert, h]
 
-lemma Formula.varMap_fVars {φ : Formula L} (hf : PartialInj p f) (hi : φ.av p) :
+lemma Formula.varMap_fVars {φ : Formula L} (hf : PartInj p f) (hi : φ.av p) :
     (varMap f φ).fVars = φ.fVars.image f := by
   open Finset in
   induction φ with
@@ -456,7 +456,7 @@ lemma Formula.varMap_fVars {φ : Formula L} (hf : PartialInj p f) (hi : φ.av p)
     rw [image_union, hx fun i h => hi i (Or.inl h), hy fun i h => hi i (Or.inr h)]
   | fall i ψ h =>
     unfold varMap fVars
-    rw [PartialInj.image_erase hf, h]
+    rw [PartInj.image_erase hf, h]
     · intro x hx
       apply hi x
       unfold vars; rw [mem_insert]
@@ -470,7 +470,7 @@ lemma Formula.varMap_fVars {φ : Formula L} (hf : PartialInj p f) (hi : φ.av p)
       unfold vars
       apply mem_insert_self
 
-lemma Term.varMap_subst (hf : PartialInj p f) (i : Idx) (t s : Term L)
+lemma Term.varMap_subst (hf : PartInj p f) (i : Idx) (t s : Term L)
     (pi : p i) (ht : t.av p) :
     (s.subst i t).varMap f = (s.varMap f).subst (f i) (t.varMap f) := by
   induction t with
@@ -491,7 +491,7 @@ lemma Term.varMap_subst (hf : PartialInj p f) (i : Idx) (t s : Term L)
     congr; funext k
     apply h k fun j hj => ht j k hj
 
-lemma Formula.varMap_FreeFor (hf : PartialInj p f) {i : Idx} {t : Term L} {φ : Formula L}
+lemma Formula.varMap_FreeFor (hf : PartInj p f) {i : Idx} {t : Term L} {φ : Formula L}
     (pi : p i) (hi : φ.av p) (ht : t.av p) :
     φ.FreeFor i t ↔ (varMap f φ).FreeFor (f i) (t.varMap f) := by
   open Finset in
@@ -522,7 +522,7 @@ lemma Formula.varMap_FreeFor (hf : PartialInj p f) {i : Idx} {t : Term L} {φ : 
         rw [h4] at hk
         exact h3 hk
 
-lemma Formula.varMap_subst (hf : PartialInj p f) {i : Idx} {t : Term L} {φ : Formula L}
+lemma Formula.varMap_subst (hf : PartInj p f) {i : Idx} {t : Term L} {φ : Formula L}
     (h : φ.FreeFor i t) (pi : p i) (hi : φ.av p) (ht : t.av p) :
     (φ.subst i t h).varMap f = (varMap f φ).subst (f i) (t.varMap f) (by
       rw [←Formula.varMap_FreeFor hf pi hi ht]; exact h) := by
@@ -569,7 +569,7 @@ structure Mor (L : Lang LF LP) where
   ι : Idx -> Idx
   τ : Term L -> Term L
   f : Formula L -> Formula L
-  inj_ι : PartialInj p ι
+  inj_ι : PartInj p ι
 
 open Formula Finset in
 structure MorAx (m : Mor L) (c : VarContext L m.p) : Prop where
@@ -581,14 +581,14 @@ structure MorAx (m : Mor L) (c : VarContext L m.p) : Prop where
   map_subst (h) :
     m.f (subst c.i c.t c.φ h) = subst (m.ι c.i) (m.τ c.t) (m.f c.φ) (free_for h)
 
-def Formula.varMor {p} {f : Idx → Idx} (hf : PartialInj p f) (L : Lang LF LP) : Mor L where
+def Formula.varMor {p} {f : Idx → Idx} (hf : PartInj p f) (L : Lang LF LP) : Mor L where
   p := p
   ι := f
   τ := Term.varMap f
   f := Formula.varMap f
   inj_ι := hf
 
-def Formula.varMorAx {p f} (hf : PartialInj p f) (c : VarContext L p) :
+def Formula.varMorAx {p f} (hf : PartInj p f) (c : VarContext L p) :
     MorAx (varMor hf L) c where
   map_falsum := rfl
   map_impl := rfl

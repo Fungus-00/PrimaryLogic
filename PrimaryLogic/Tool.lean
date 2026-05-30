@@ -1,5 +1,4 @@
 import Mathlib.Data.Finset.Basic
-import Mathlib.Data.Finsupp.Basic
 import Mathlib.Data.Finset.Sort
 import Mathlib.Data.Nat.Find
 
@@ -164,6 +163,7 @@ instance : Equivalence (List.ceq (α := α)) where
 
 end list_ceq
 
+-- Rewrite theorems in Lean4 and Mathlib avoiding the axiom of choice.
 section fix
 open Std in
 local instance Lx1 {α : Type*} [LE α] [DecidableLE α] [Max α]
@@ -205,17 +205,24 @@ theorem add_eq_left' {a b : Nat} : a + b = a ↔ b = 0 := by
         rw [←add_assoc]
       exact ha (add_right_cancel h)
   · intro h; rw [h]; apply Nat.add_zero
+
+
+open List in
+theorem mem_dedup' {α : Type*} [DecidableEq α] {a : α} {l : List α} : a ∈ dedup l ↔ a ∈ l := by
+  have := not_congr (@forall_mem_pwFilter α (· ≠ ·) _ ?_ a l)
+  · simpa only [dedup, forall_mem_ne, Decidable.not_not] using this
+  · intro x y z xz
+    exact Decidable.not_and_iff_not_or_not.1 <| mt (fun h ↦ h.1.trans h.2) xz
+
 end fix
 
 section freshable
+
+-- About to be deprecated, use LFreshable instead
 class Freshable (α : Type*) [DecidableEq α] where
   fresh : Finset α → α
   fresh_is_new : ∀ s : Finset α, fresh s ∉ s
 
-/-- `fresh` algorithm was originally implemented by `Finset.max` function,
-    without optimal utilization of space, then `Nat.find` was selected instead.
-  Not sure the time efficiency of the latter though.
-  Yet both the time and space optimal algorithm will be explored in another file. -/
 instance : Freshable Idx where
   fresh := fun s => Nat.find (p := (· ∉ s)) (by
     cases h : s.max with
@@ -272,16 +279,16 @@ instance : LFreshable Nat where
 end freshable
 
 section pfun
-def PartialInj {α β : Type*} (p : α -> Prop) (f : α -> β) : Prop :=
+def PartInj {α β : Type*} (p : α -> Prop) (f : α -> β) : Prop :=
   ∀ {x y : α}, p x -> p y -> f x = f y -> x = y
 
 variable {α β : Type*} {p : α -> Prop} {f : α -> β}
 
-namespace PartialInj
-theorem ne (hf : PartialInj p f) {x y : α} : p x → p y → x ≠ y → f x ≠ f y :=
+namespace PartInj
+theorem ne (hf : PartInj p f) {x y : α} : p x → p y → x ≠ y → f x ≠ f y :=
   fun hx hy => mt fun h => hf hx hy h
 
-theorem mem_finset_image (hf : PartialInj p f) [DecidableEq β] {s : Finset α} {a : α}
+theorem mem_finset_image (hf : PartInj p f) [DecidableEq β] {s : Finset α} {a : α}
     (hs : ∀ x ∈ s, p x) : p a → (f a ∈ s.image f ↔ a ∈ s) := fun h => by
   rw [Finset.mem_image]
   constructor
@@ -290,7 +297,7 @@ theorem mem_finset_image (hf : PartialInj p f) [DecidableEq β] {s : Finset α} 
     rwa [this] at h1
   · intro ha; use a
 
-theorem image_erase [DecidableEq α] [DecidableEq β] (hf : PartialInj p f) (s : Finset α) (a : α)
+theorem image_erase [DecidableEq α] [DecidableEq β] (hf : PartInj p f) (s : Finset α) (a : α)
     (hs : ∀ x ∈ s, p x) (ha : p a) : (s.erase a).image f = (s.image f).erase (f a) := by
   rw [Finset.ext_iff]; intro b
   rw [Finset.mem_image, Finset.mem_erase]
@@ -308,7 +315,7 @@ theorem image_erase [DecidableEq α] [DecidableEq β] (hf : PartialInj p f) (s :
     rw [this] at h3
     exact h1 h3.symm
 
-end PartialInj
+end PartInj
 
 end pfun
 
@@ -442,24 +449,76 @@ private lemma expand_uni2 {s : List α × List β} {l : List α}
             rw [←hn] at hm
             omega
           | .inr hm, .inr hn => rw [hm, hn]
+
+private lemma expand_mem1 {s : List α × List β} {l : List α} {a : α} :
+    a ∈ s.1 → a ∈ (expand s l).1 := fun h => by
+  induction l with
+  | nil => exact h
+  | cons b r h' =>
+    dsimp [expand]
+    split_ifs with h1
+    · exact h'
+    · rw [List.mem_cons]
+      right; exact h'
+
+private lemma expand_corr {s : List α × List β} {l : List α} {n : Nat} :
+    let r := expand s l; ∀ h1 : n < r.1.length, ∀ h2 : n < r.2.length,
+    r.1[n] ∈ s.1 → ∃ k : Nat, ∃ h3 : k < s.1.length, ∃ h4 : k < s.2.length,
+    r.1[n] = s.1[k] ∧ r.2[n] = s.2[k] := fun h1 h2 h3 => by
+  induction l generalizing n with
+  | nil => dsimp [expand] at h1 h2 ⊢; use n, h1, h2
+  | cons b r h' =>
+    dsimp [expand] at h1 h2 h3 ⊢
+    split_ifs with h
+    · simp only [h, ↓reduceIte] at h1 h2 h3
+      exact h' h1 h2 h3
+    · simp only [h, ↓reduceIte, List.length_cons, exists_and_left, exists_and_right]
+        at h1 h2 h3 ⊢
+      by_cases hn : n = 0
+      · conv at h3 => rhs; arg 2; rw [hn]
+        simp only [List.getElem_cons_zero] at h3
+        exfalso; exact h <| expand_mem1 h3
+      · simp only [List.getElem_cons, hn, ↓reduceDIte] at h3 ⊢
+        replace h1 : n - 1 < (expand s r).1.length := by omega
+        replace h2 : n - 1 < (expand s r).2.length := by omega
+        have ⟨k, h4, h5, h6, h7⟩ := h' h1 h2 h3
+        use k
+        exact ⟨⟨h4, h6⟩, ⟨h5, h7⟩⟩
 end expand
 
 section pass
 variable {p : α → Prop} [DecidablePred p]
 
-private def prePass (p : α → Prop) [DecidablePred p] : List α → List (Subtype p)
+private def extractSub (p : α → Prop) [DecidablePred p] : List α → List (Subtype p)
   | [] => []
-  | a :: l => if h : p a then ⟨a, h⟩ :: prePass p l else prePass p l
+  | a :: l => if h : p a then ⟨a, h⟩ :: extractSub p l else extractSub p l
 
 private def pass (p : α → Prop) [DecidablePred p] (l : List α) : List (Subtype p) :=
-  (prePass p l).dedup
+  (extractSub p l).dedup
+
+private lemma pass_valid {p : α → Prop} [DecidablePred p] {l : List α} {a : α}
+    (hl : a ∈ l) (hp : p a) : ⟨a, hp⟩ ∈ pass p l := by
+  simp only [pass, mem_dedup']
+  induction l with
+  | nil => exfalso; exact List.not_mem_nil hl
+  | cons b r h =>
+    dsimp [extractSub]
+    rw [List.mem_cons] at hl
+    split_ifs with h1
+    · rw [List.mem_cons]
+      rcases hl with h2 | h3
+      · subst h2; left; rfl
+      · right; exact h h3
+    · rcases hl with h2 | h3
+      · subst h2; exfalso; exact h1 hp
+      · exact h h3
 
 private lemma pass_uni (p : α → Prop) [DecidablePred p] {l : List α} :
     let s := pass p l; ∀ {m n : Nat}, ∀ hm : m < s.length, ∀ hn : n < s.length,
     s[m]'hm = s[n]'hn → m = n := fun _ _ h =>
-  Fin.val_inj.mpr <| (List.Nodup.get_inj_iff <| List.nodup_dedup <| prePass p l).mp h
+  Fin.val_inj.mpr <| (List.Nodup.get_inj_iff <| List.nodup_dedup <| extractSub p l).mp h
 
-def _root_.List.rejoin (p : α → Prop) [DecidablePred p] [LFreshable (Subtype p)]
+def _root_.List.canonize (p : α → Prop) [DecidablePred p] [LFreshable (Subtype p)]
     (l : List α) (a : α) : Subtype p :=
   if h : a ∈ l then
     let s := expand (⟨(pass p l).unattach, (pass p l)⟩) l
@@ -474,10 +533,10 @@ def _root_.List.rejoin (p : α → Prop) [DecidablePred p] [LFreshable (Subtype 
 
 variable {p : α → Prop} [DecidablePred p] [LFreshable (Subtype p)]
 
-theorem _root_.List.rejoin_PartialInj (l : List α) :
-    PartialInj (· ∈ l) (List.rejoin p l) := fun {x y} hx hy h => by
+theorem _root_.List.canonize_PartInj (l : List α) :
+    PartInj (· ∈ l) (List.canonize p l) := fun {x y} hx hy h => by
   dsimp at hx hy
-  simp only [List.rejoin, hx, ↓reduceDIte, hy] at h
+  simp only [List.canonize, hx, ↓reduceDIte, hy] at h
   have h1 := expand_uni2 (s := ((pass p l).unattach, pass p l))
     (fun {m n} hm hn h' => by dsimp at hm hn h'; exact pass_uni p hm hn h')
     (by rw [←expand_len _ (List.length_unattach)]; apply List.first_valid)
@@ -487,11 +546,24 @@ theorem _root_.List.rejoin_PartialInj (l : List α) :
   dsimp at h2
   rwa [List.first_get (a := x), List.first_get (a := y), Option.some_inj] at h2
 
-theorem _root_.List.rejoin_invariance (l : List α) (a : α) (hl : a ∈ l) (hp : p a) :
-    l.rejoin p a = ⟨a, hp⟩ := by
-  simp only [List.rejoin, hl, ↓reduceDIte]
+theorem _root_.List.canonize_invariance {l : List α} {a : α} (hl : a ∈ l) (hp : p a) :
+    l.canonize p a = ⟨a, hp⟩ := by
+  simp only [List.canonize, hl, ↓reduceDIte]
+  set s := ((pass p l).unattach, pass p l) with ht
+  conv => lhs; arg 2; arg 1; rw [←ht]
+  conv => lhs; arg 1; rw [←ht]
+  have h1 := List.first_get (expand_ex s hl)
+  replace ⟨h0, h1⟩ := List.some_eq_getElem?_iff.mp h1.symm
+  have h2 : a ∈ s.1 := List.mem_unattach.mpr ⟨hp, pass_valid hl hp⟩
+  rw [←h1] at h2
+  have h3 := expand_len s (List.length_unattach) l
+  have ⟨k, h4, h5, h6, h7⟩ := expand_corr _ (h3 ▸ h0) h2
+  rw [h7]
+  rw [h1] at h6
+  dsimp [s] at h6 ⊢
+  ext; dsimp; symm
+  rwa [List.getElem_unattach] at h6
 
-  sorry
 end pass
 end List
 end PrimaryLogic
