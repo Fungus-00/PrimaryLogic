@@ -37,13 +37,13 @@ lemma con_empty : Con (L := L) ∅ := by
   unfold Formula.interpret at h2
   exact h2
 
-variable [Encodable LF] [Encodable LP]
+variable [Encodable LF] [Encodable LP] [DecidablePred (InCon (L := L))]
 
-open Classical in
 def tryAdd (n : Nat) : Set (Formula L) :=
   match Encodable.decode (α := Formula L) n with
   | none => Γ
-  | some φ => if InCon (Γ.insert φ) then Γ.insert (¬φ) else Γ.insert φ
+  | some φ => if InCon (Γ.insert φ)
+    then Γ.insert (¬φ) else Γ.insert φ
 
 def expand (Γ : Set (Formula L)) : Nat -> Set (Formula L)
   | .zero => Γ
@@ -118,7 +118,7 @@ theorem Lindenbaum : Con Γ -> MaximalConsistent (maxExpand Γ) := by
     have := expandAdd_con_valid Γ n h
     contradiction
   · intro φ
-    by_cases h1 : φ ∈ maxExpand Γ
+    rcases lem (φ ∈ maxExpand Γ) with h1 | h1
     · left; exact h1
     · right
       rw [Set.mem_iUnion, not_exists] at h1
@@ -132,5 +132,4 @@ theorem Lindenbaum : Con Γ -> MaximalConsistent (maxExpand Γ) := by
         simp only [expand, tryAdd, h2, h4] at h3
         have := Set.mem_insert φ (expand Γ n)
         contradiction
-
 end PrimaryLogic

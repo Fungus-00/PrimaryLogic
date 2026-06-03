@@ -55,9 +55,11 @@ theorem Term.listDecode_encode_list (l : List (Term L)) :
         rw [length_map, length_finRange]
         exact Fin.is_lt k
       · rw [drop_left']; rw [length_map, length_finRange]
-    · rw [h] at hi;
-      rw [length_append, length_map, length_finRange] at hi;
-      simp [n] at hi
+    · rw [h] at hi
+      rw [length_append, length_map, length_finRange] at hi
+      unfold n at hi
+      rw [Nat.not_le] at hi
+      omega
 
 protected def Term.encoding : Computability.Encoding (Term L) where
   Γ := Idx ⊕ LF
@@ -71,7 +73,7 @@ protected def Term.encoding : Computability.Encoding (Term L) where
 instance [Encodable LF] : Encodable (Term L) :=
   Encodable.ofLeftInjection Term.listEncode (fun l => (Term.listDecode l).head?) fun t => by
     simp only
-    rw [← List.flatMap_singleton Term.listEncode, Term.listDecode_encode_list]
+    rw [←List.flatMap_singleton Term.listEncode, Term.listDecode_encode_list]
     simp only [List.head?_cons]
 
 abbrev PredArgs (L : Lang LF LP) := Σ p : LP, Fin (L.preds p) -> Term L
@@ -135,8 +137,7 @@ protected def Formula.encoding : Computability.Encoding (Formula L) where
 
 instance [Encodable LF] [Encodable LP] : Encodable (Formula L) :=
   Encodable.ofLeftInjection Formula.listEncode (fun l => (Formula.listDecode l).head?) fun t => by
-    simp only
-    rw [← List.flatMap_singleton Formula.listEncode, Formula.listDecode_encode_list]
+    dsimp only
+    rw [←List.flatMap_singleton Formula.listEncode, Formula.listDecode_encode_list]
     simp only [List.head?_cons]
-
 end PrimaryLogic

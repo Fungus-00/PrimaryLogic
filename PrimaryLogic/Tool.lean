@@ -36,13 +36,13 @@ end decSet
 
 section lem
 
-theorem idn_iff_lem : (∀ p : Prop, ¬¬p → p) ↔ (∀ p : Prop, p ∨ ¬p) where
+theorem dne_iff_lem : (∀ p : Prop, ¬¬p → p) ↔ (∀ p : Prop, p ∨ ¬p) where
   mp hp p := hp (p ∨ ¬p) fun h => h <| .inr fun h' => h (.inl h')
   mpr h p hp := Or.rec id (fun h' => False.elim (hp h')) (h p)
 
-axiom idn {p : Prop} : ¬¬p → p
+axiom dne {p : Prop} : ¬¬p → p
 
-theorem lem (p : Prop) : p ∨ ¬p := idn_iff_lem.mp (@idn ·) p
+theorem lem (p : Prop) : p ∨ ¬p := dne_iff_lem.mp (@dne ·) p
 
 lemma or_dec {p : Prop} (e : p ∨ ¬ p) : Nonempty (Decidable p) :=
   Or.rec (.intro <| isTrue ·) (.intro <| isFalse ·) e

@@ -1,5 +1,4 @@
 import PrimaryLogic.Formula
-import Mathlib.Data.Set.Lattice.Image
 
 namespace PrimaryLogic
 variable {LF LP : Type} {L : Lang LF LP}

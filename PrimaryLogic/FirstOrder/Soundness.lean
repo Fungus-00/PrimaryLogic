@@ -9,7 +9,7 @@ lemma soundness_axiom (M : Structure L α) (s : Assignment α) (ax : FOLAxioms L
   match ax with
   | .h1 x y => fun h _ => h
   | .h2 x y z => fun ha hb hc => ha hc (hb hc)
-  | .h3 x => fun h => idn h
+  | .h3 x => fun h => dne h
   | .q1 i x y => fun ha hb a => ha a (hb a)
   | .q2 i t x g => fun h =>  (Formula.interpret_subst M s g).mpr (h _)
   | .q3 i x g => fun h a => (Formula.interpret_replace_invariance M s a g).mpr h

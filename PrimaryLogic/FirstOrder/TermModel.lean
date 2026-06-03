@@ -26,8 +26,11 @@ class Henkin (Δ : Set (Formula L)) (θ : Idx -> Formula L -> Term L) : Prop whe
   pt : ∀ i : Idx, ∀ φ : Formula L, Formula.FreeFor i (θ i φ) φ
   ax : ∀ i : Idx, ∀ φ : Formula L, Formula.henkin i (θ i φ) φ (pt i φ) ∈ Δ
 
+instance {α : Type*} (s : Set α) [inst : DecidablePred s] : DecidablePred (· ∈ s) := inst
+
 variable {θ : Idx -> Formula L -> Term L}
-theorem Formula.truth_lemma [hk : Henkin Δ θ] (φ : Formula L) :
+set_option linter.unusedDecidableInType false in
+theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula L) :
     interpret (TermModel Δ) .var φ ↔ φ ∈ Δ := by
   induction hd : φ.depth using Nat.strongRec generalizing φ with
   | ind d h => cases φ with
@@ -98,5 +101,4 @@ theorem Formula.truth_lemma [hk : Henkin Δ θ] (φ : Formula L) :
       rw [Set.mem_singleton_iff] at hg
       rw [hg]
       exact p
-
 end PrimaryLogic
