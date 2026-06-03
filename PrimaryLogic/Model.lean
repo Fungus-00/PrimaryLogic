@@ -63,10 +63,10 @@ lemma Term.interpret_coincidence {x : Term L} {s t : Assignment α} :
   induction x with
   | var i =>
     unfold Term.interpret
-    exact hx i (Finset.mem_singleton_self i)
+    exact hx i (Set.mem_singleton i)
   | app m ms f =>
     unfold Term.interpret
-    simp only [vars, Finset.mem_biUnion, Finset.mem_univ, true_and, forall_exists_index] at hx
+    simp only [vars, Set.mem_iUnion, forall_exists_index] at hx
     conv =>
       lhs; arg 3; intro fi
       exact f fi fun i hi => hx i fi hi
@@ -82,34 +82,34 @@ lemma Term.interpret_replace_invariance {t : Term L} (s : Assignment α) (a : α
   exact hi hj
 
 theorem Formula.interpret_coincidence {φ : Formula L} (s t : Assignment α) :
-    (∀ i ∈ φ.fVars, s i = t i) -> (φ.interpret M s <-> φ.interpret M t) := by
+    (∀ i ∈ φ.fvar, s i = t i) -> (φ.interpret M s <-> φ.interpret M t) := by
   intro h
   induction φ generalizing s t with
   | atom n ns =>
     unfold interpret
-    simp only [fVars, Finset.mem_biUnion, Finset.mem_univ, true_and, forall_exists_index] at h
+    simp only [fvar, Set.mem_iUnion, forall_exists_index] at h
     conv =>
       lhs; arg 3; intro fi;
       exact Term.interpret_coincidence M fun i hi => h i fi hi
   | falsum => unfold interpret; decide
   | impl φ ψ ha hb =>
     unfold interpret
-    simp only [fVars, Finset.mem_union] at h
+    simp only [fvar, Set.mem_union] at h
     have h1 := ha s t fun i hi => h i (.inl hi)
     have h2 := hb s t fun i hi => h i (.inr hi)
     rw [h1, h2]
   | fall i φ hi =>
     unfold interpret
-    simp only [fVars, Finset.mem_erase, ne_eq, and_imp] at h
-    have : ∀ a : α, ∀ j ∈ φ.fVars,
+    simp only [fvar, Set.mem_diff, Set.mem_singleton_iff, and_imp] at h
+    have : ∀ a : α, ∀ j ∈ φ.fvar,
         (replace s i a) j = (replace t i a) j := by
       intro a j hj
-      by_cases h' : j = i <;> simp only [replace, h', ↓reduceIte]; exact h j h' hj
+      by_cases h' : j = i <;> simp only [replace, h', ↓reduceIte]; exact h j hj h'
     conv => lhs; intro a; rw [hi _ _ (this a)]
 
 theorem Formula.interpret_replace_invariance
     {φ : Formula L} (s : Assignment α) (a : α) {i : Idx} :
-    i ∉ φ.fVars -> (φ.interpret M (replace s i a) <-> φ.interpret M s) := by
+    i ∉ φ.fvar -> (φ.interpret M (replace s i a) <-> φ.interpret M s) := by
   intro hi
   apply interpret_coincidence M
   simp only [ite_eq_right_iff]
@@ -118,14 +118,14 @@ theorem Formula.interpret_replace_invariance
   exfalso; exact hi hj
 
 /-- Classical needed -/
-theorem Structure.sentence_determinacy (φ : Formula L) : φ.fVars = ∅ ->
+theorem Structure.sentence_determinacy (φ : Formula L) : φ.fvar = ∅ ->
     (∀ s : Assignment α, φ.interpret M s) ∨ (∀ s : Assignment α, ¬ φ.interpret M s) := by
   intro h0
   let s0 : Assignment α := fun _ => Inhabited.default (α := α)
   have := Formula.interpret_coincidence M (φ := φ) s0
-  by_cases h : φ.interpret M s0
-  · left; intro s; exact (this s (by simp [h0])).mp h
-  · right; intro s; exact (Iff.not (this s (by simp [h0]))).mp h
+  rcases lem (φ.interpret M s0) with h1 | h2
+  · left; intro s; exact (this s <| by simp [h0]).mp h1
+  · right; intro s; exact (Iff.not <| this s <| by simp [h0]).mp h2
 
 /-- The following two theorems show that the sentence makes no essential difference from
   unclosed formula in the sense of semantic level, corresponding to the generalizing theorem
@@ -138,7 +138,7 @@ theorem Structure.satisfies_gen_elim {M : Structure L α} {Γ} {φ : Formula L} 
   exact (h s h1) (s i)
 
 theorem Structure.satisfies_gen_intro (Γ) (φ : Formula L) (i : Idx) :
-    (∀ g ∈ Γ, i ∉ g.fVars) -> M.satisfies Γ φ -> M.satisfies Γ (.fall i φ) := by
+    (∀ g ∈ Γ, i ∉ g.fvar) -> M.satisfies Γ φ -> M.satisfies Γ (.fall i φ) := by
   intro hg h s h1 a
   have : ∀ g ∈ Γ, Formula.interpret M (replace s i a) g := by
     intro g h2
@@ -194,7 +194,7 @@ theorem Formula.interpret_subst (s) {i t φ} (h : FreeFor i t φ) :
         conv => rhs; intro a; rw [interpret_replace_invariance M _ _ h2]
         conv =>
           lhs; intro a; arg 3;
-          rw [subst_invariance (out_var_FreeFor_term t h2) h2]
+          rw [subst_invariance h2]
       · have (a : α) := h' (replace s j a) h3.right
         conv => lhs; intro a; rw [this a]
         conv => rhs; intro a; lhs; rw [replace_comm s i j hi]

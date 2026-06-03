@@ -1,8 +1,38 @@
+import PrimaryLogic.NoAC
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Finset.Sort
-import Mathlib.Data.Nat.Find
+import Mathlib.Data.List.Dedup
 
 namespace PrimaryLogic
+section decSet
+variable {α : Type u}
+
+theorem Set.union_eq_empty {s t : Set α} :
+    s ∪ t = ∅ ↔ s = ∅ ∧ t = ∅ := by
+  repeat rw [Set.eq_empty_iff_forall_notMem]
+  constructor
+  · intro h
+    split_ands
+    · intro x
+      have h' := h x
+      rw [Set.mem_union, not_or] at h'
+      exact h'.1
+    · intro x
+      have h' := h x
+      rw [Set.mem_union, not_or] at h'
+      exact h'.2
+  · intro h x
+    rw [Set.mem_union, not_or]
+    exact ⟨h.1 x, h.2 x⟩
+
+instance [inst : DecidableEq α] {a : α} : DecidablePred ({a} : Set α) := by
+  unfold DecidablePred
+  intro x
+  unfold DecidableEq at inst
+  have h := inst x a
+  rw [←Set.mem_singleton_iff] at h
+  exact h
+end decSet
 
 section lem
 
@@ -10,10 +40,14 @@ theorem idn_iff_lem : (∀ p : Prop, ¬¬p → p) ↔ (∀ p : Prop, p ∨ ¬p) 
   mp hp p := hp (p ∨ ¬p) fun h => h <| .inr fun h' => h (.inl h')
   mpr h p hp := Or.rec id (fun h' => False.elim (hp h')) (h p)
 
-axiom idn (p : Prop) : ¬¬p → p
+axiom idn {p : Prop} : ¬¬p → p
+
+theorem lem (p : Prop) : p ∨ ¬p := idn_iff_lem.mp (@idn ·) p
 
 lemma or_dec {p : Prop} (e : p ∨ ¬ p) : Nonempty (Decidable p) :=
-  Or.elim e (.intro <| isTrue ·) (.intro <| isFalse ·)
+  Or.rec (.intro <| isTrue ·) (.intro <| isFalse ·) e
+
+theorem ndec (p : Prop) : Nonempty (Decidable p) := or_dec (lem p)
 end lem
 
 section forall_in
@@ -162,83 +196,14 @@ instance : Equivalence (List.ceq (α := α)) where
   trans := fun x y z => (x z).trans (y z)
 
 end list_ceq
-
--- Rewrite theorems in Lean4 and Mathlib avoiding the axiom of choice.
-section fix
-open Std in
-local instance Lx1 {α : Type*} [LE α] [DecidableLE α] [Max α]
-    [LawfulOrderLeftLeaningMax α] : MaxEqOr α where
-  max_eq_or a b := by
-    suffices min_eq : max a b = if b ≤ a then a else b by
-      rw [min_eq]
-      split <;> simp
-    split <;> simp [*, LawfulOrderLeftLeaningMax.max_eq_left,
-      LawfulOrderLeftLeaningMax.max_eq_right]
-
-open List in
-theorem max?_eq_some_iff' {α a} [Max α] [LE α] [DecidableLE α] {xs : List α} [Std.IsLinearOrder (α)]
-    [Std.LawfulOrderMax α] : xs.max? = some a ↔ a ∈ xs ∧ ∀ b, b ∈ xs → b ≤ a := by
-  constructor
-  · intro h; exact ⟨max?_mem h, (max?_le_iff h).1 (Std.le_refl _)⟩
-  · intro ⟨h₁, h₂⟩
-    cases xs with
-    | nil => simp at h₁
-    | cons x xs =>
-      rw [List.max?]
-      exact congrArg some <| Std.le_antisymm
-        (h₂ _ (max?_mem (xs := x :: xs) rfl))
-        ((max?_le_iff (xs := x :: xs) rfl).1 (Std.le_refl _) _ h₁)
-
-theorem eq_nil_iff_forall_not_mem' {α} {l : List α} : l = [] ↔ ∀ a, a ∉ l := by
-  cases l <;> simp only [List.not_mem_nil, not_false_eq_true, implies_true, reduceCtorEq,
-    List.mem_cons, forall_eq_or_imp, imp_false, false_and]
-
-theorem add_eq_left' {a b : Nat} : a + b = a ↔ b = 0 := by
-  constructor
-  · intro h
-    induction a with
-    | zero => rwa [Nat.zero_add] at h
-    | succ n ha =>
-      conv at h =>
-        lhs; rw [add_assoc]
-        conv => rhs; rw [add_comm]
-        rw [←add_assoc]
-      exact ha (add_right_cancel h)
-  · intro h; rw [h]; apply Nat.add_zero
-
-
-open List in
-theorem mem_dedup' {α : Type*} [DecidableEq α] {a : α} {l : List α} : a ∈ dedup l ↔ a ∈ l := by
-  have := not_congr (@forall_mem_pwFilter α (· ≠ ·) _ ?_ a l)
-  · simpa only [dedup, forall_mem_ne, Decidable.not_not] using this
-  · intro x y z xz
-    exact Decidable.not_and_iff_not_or_not.1 <| mt (fun h ↦ h.1.trans h.2) xz
-
-end fix
-
 section freshable
 
--- About to be deprecated, use LFreshable instead
-class Freshable (α : Type*) [DecidableEq α] where
-  fresh : Finset α → α
-  fresh_is_new : ∀ s : Finset α, fresh s ∉ s
-
-instance : Freshable Idx where
-  fresh := fun s => Nat.find (p := (· ∉ s)) (by
-    cases h : s.max with
-    | bot => simp [Finset.max_eq_bot.mp h]
-    | coe m =>
-      use m + 1
-      exact Finset.notMem_of_max_lt (a := m+1) (b := m) (by simp) h
-  )
-  fresh_is_new s := Nat.find_spec (p := fun i => i ∉ s) _
-
-class LFreshable (α : Type*) where
+class Freshable (α : Type*) where
   fresh : List α → α
   fresh_is_new : ∀ s, fresh s ∉ s
   fresh_ceq_invariance : ∀ s t, s.ceq t → fresh s = fresh t
 
-instance : LFreshable Nat where
+instance : Freshable Nat where
   fresh s := match List.max? s with | none => 0 | some n => n.succ
   fresh_is_new s := by
     cases h : s with
@@ -248,7 +213,7 @@ instance : LFreshable Nat where
       constructor
       · by_cases h': l = []
         · rw [h']; unfold List.foldl
-          simp only [add_eq_left', one_ne_zero, not_false_eq_true]
+          simp only [Nat.add_eq_left', Nat.one_ne_zero, not_false_eq_true]
         · rw [List.foldl_max_eq_max h']
           omega
       · by_cases h': l = []
@@ -261,18 +226,18 @@ instance : LFreshable Nat where
     match hs : s.max?, ht : t.max? with
     | none, none => rfl
     | none, some n =>
-      rw [List.max?_eq_none_iff, eq_nil_iff_forall_not_mem'] at hs
-      rw [max?_eq_some_iff'] at ht
+      rw [List.max?_eq_none_iff, List.eq_nil_iff_forall_not_mem'] at hs
+      rw [List.max?_eq_some_iff''] at ht
       have h' := (h n).mpr ht.1
       exfalso; exact hs n h'
     | some n, none =>
-      rw [List.max?_eq_none_iff, eq_nil_iff_forall_not_mem'] at ht
-      rw [max?_eq_some_iff'] at hs
+      rw [List.max?_eq_none_iff, List.eq_nil_iff_forall_not_mem'] at ht
+      rw [List.max?_eq_some_iff''] at hs
       have h' := (h n).mp hs.1
       exfalso; exact ht n h'
     | some m, some n =>
       simp only [Nat.succ_eq_add_one, Nat.add_right_cancel_iff]
-      rw [max?_eq_some_iff'] at hs ht
+      rw [List.max?_eq_some_iff''] at hs ht
       have h1 := ht.2 m <| (h m).mp hs.1
       have h2 := hs.2 n <| (h n).mpr ht.1
       exact h1.antisymm h2
@@ -288,32 +253,37 @@ namespace PartInj
 theorem ne (hf : PartInj p f) {x y : α} : p x → p y → x ≠ y → f x ≠ f y :=
   fun hx hy => mt fun h => hf hx hy h
 
-theorem mem_finset_image (hf : PartInj p f) [DecidableEq β] {s : Finset α} {a : α}
+theorem mem_set_image (hf : PartInj p f) {s : Set α} {a : α}
     (hs : ∀ x ∈ s, p x) : p a → (f a ∈ s.image f ↔ a ∈ s) := fun h => by
-  rw [Finset.mem_image]
+  rw [Set.mem_image]
   constructor
   · intro ⟨b, ⟨h1, h2⟩⟩
     have := hf (hs b h1) h h2
     rwa [this] at h1
   · intro ha; use a
 
-theorem image_erase [DecidableEq α] [DecidableEq β] (hf : PartInj p f) (s : Finset α) (a : α)
-    (hs : ∀ x ∈ s, p x) (ha : p a) : (s.erase a).image f = (s.image f).erase (f a) := by
-  rw [Finset.ext_iff]; intro b
-  rw [Finset.mem_image, Finset.mem_erase]
-  conv => lhs; arg 1; intro; rw [Finset.mem_erase]
-  conv => rhs; arg 2; rw [Finset.mem_image]
+theorem image_diff (hf : PartInj p f) {s t : Set α} (hs : ∀ x ∈ s, p x) (ht : ∀ x ∈ t, p x) :
+    f '' (s \ t) = (f '' s) \ (f '' t) := by
+  rw [Set.ext_iff]; intro b
+  rw [Set.mem_image, Set.mem_diff]
+  conv => lhs; arg 1; intro; rw [Set.mem_diff]
+  conv => rhs; arg 2; rw [Set.mem_image]
   constructor
   · intro ⟨x, h1, h2⟩
-    have h3 := ne hf ha (hs x h1.right) h1.left.symm
-    rw [h2] at h3
-    exact ⟨h3.symm, x, h1.right, h2⟩
-  · intro ⟨h1, x, h2, h3⟩
-    use x
-    refine ⟨⟨?_, h2⟩, h3⟩
-    by_contra
-    rw [this] at h3
-    exact h1 h3.symm
+    rw [←h2, not_exists]
+    split_ands
+    · exact Set.mem_image_of_mem f h1.1
+    · intro a; rw [not_and]; intro h
+      apply ne hf (ht a h) (hs x h1.1)
+      by_contra ha
+      rw [ha] at h
+      exact h1.2 h
+  · intro ⟨h1, h2⟩
+    obtain ⟨a, h⟩ := (Set.mem_image f s b).mp h1
+    rw [not_exists] at h2
+    use a
+    have h' := not_and.mp (h2 a)
+    exact ⟨⟨h.1, fun h4 => h' h4 h.2⟩, h.2⟩
 
 end PartInj
 
@@ -357,13 +327,13 @@ theorem _root_.List.first_get {α : Type*} [DecidableEq α] {l : List α} {a : �
 end first
 
 section expand
-variable {β : Type*} [LFreshable β]
+variable {β : Type*} [Freshable β]
 private def expand (s : List α × List β) : List α → List α × List β
   | [] => s
   | a :: l =>
     let r := expand s l;
     if a ∈ r.1 then r
-    else ⟨a :: r.1, (LFreshable.fresh r.2) :: r.2⟩
+    else ⟨a :: r.1, (Freshable.fresh r.2) :: r.2⟩
 
 private lemma expand_len (s : List α × List β) (hs : s.1.length = s.2.length)
     (l : List α) : (expand s l).1.length = (expand s l).2.length := by
@@ -417,14 +387,14 @@ private lemma expand_uni2 {s : List α × List β} {l : List α}
         have h5 := Or.elim hn
           (Nat.sub_lt_of_lt ·) (fun h' => by rw [←h']; exact Nat.sub_one_lt h3)
         have h6 := hr.symm ▸ List.getElem_mem h5
-        exact LFreshable.fresh_is_new _ h6
+        exact Freshable.fresh_is_new _ h6
       · by_cases h4 : n = 0
         · simp only [h4, ↓reduceDIte] at hr
           exfalso
           have h5 := Or.elim hm
             (Nat.sub_lt_of_lt ·) (fun h' => by rw [←h']; exact Nat.sub_one_lt h2)
           have h6 := hr ▸ List.getElem_mem h5
-          exact LFreshable.fresh_is_new _ h6
+          exact Freshable.fresh_is_new _ h6
         · simp only [h4, ↓reduceDIte] at hr
           match hm, hn with
           | .inl hm, .inl hn =>
@@ -498,7 +468,7 @@ private def pass (p : α → Prop) [DecidablePred p] (l : List α) : List (Subty
 
 private lemma pass_valid {p : α → Prop} [DecidablePred p] {l : List α} {a : α}
     (hl : a ∈ l) (hp : p a) : ⟨a, hp⟩ ∈ pass p l := by
-  simp only [pass, mem_dedup']
+  simp only [pass, List.mem_dedup']
   induction l with
   | nil => exfalso; exact List.not_mem_nil hl
   | cons b r h =>
@@ -518,7 +488,7 @@ private lemma pass_uni (p : α → Prop) [DecidablePred p] {l : List α} :
     s[m]'hm = s[n]'hn → m = n := fun _ _ h =>
   Fin.val_inj.mpr <| (List.Nodup.get_inj_iff <| List.nodup_dedup <| extractSub p l).mp h
 
-def _root_.List.canonize (p : α → Prop) [DecidablePred p] [LFreshable (Subtype p)]
+def _root_.List.canonize (p : α → Prop) [DecidablePred p] [Freshable (Subtype p)]
     (l : List α) (a : α) : Subtype p :=
   if h : a ∈ l then
     let s := expand (⟨(pass p l).unattach, (pass p l)⟩) l
@@ -529,9 +499,9 @@ def _root_.List.canonize (p : α → Prop) [DecidablePred p] [LFreshable (Subtyp
       · apply List.first_valid
       · dsimp; exact List.length_unattach
     s.2[s.1.first a h1]'h2
-  else LFreshable.fresh []
+  else Freshable.fresh []
 
-variable {p : α → Prop} [DecidablePred p] [LFreshable (Subtype p)]
+variable {p : α → Prop} [DecidablePred p] [Freshable (Subtype p)]
 
 theorem _root_.List.canonize_PartInj (l : List α) :
     PartInj (· ∈ l) (List.canonize p l) := fun {x y} hx hy h => by

@@ -5,7 +5,7 @@ namespace PrimaryLogic
 variable {LF LP : Type} {L : Lang LF LP}
 
 def BinPred (eq : Term L -> Term L -> Formula L) : Prop :=
-  ∀ x y, (eq x y).fVars = x.vars ∪ y.vars
+  ∀ x y, (eq x y).fvar = x.vars ∪ y.vars
 
 inductive EqAxioms (eq : Term L -> Term L -> Formula L) (b : BinPred eq) : Type
   | rfl (t : Term L)

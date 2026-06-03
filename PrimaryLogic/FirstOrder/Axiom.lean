@@ -19,7 +19,7 @@ inductive FOLAxioms (L : Lang LF LP) : Type
   | h3 : Formula L -> FOLAxioms L
   | q1 : Idx -> Formula L -> Formula L -> FOLAxioms L
   | q2 (i : Idx) (t : Term L) (φ : Formula L) : φ.FreeFor i t -> FOLAxioms L
-  | q3 (i : Idx) (φ : Formula L) : i ∉ φ.fVars -> FOLAxioms L
+  | q3 (i : Idx) (φ : Formula L) : i ∉ φ.fvar -> FOLAxioms L
   | gen : Idx -> FOLAxioms L -> FOLAxioms L
 
 def FOLAxioms.toFormula (L : Lang LF LP) : FOLAxioms L -> Formula L

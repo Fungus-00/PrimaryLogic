@@ -46,7 +46,7 @@ theorem Proof.hasTree {Γ} {φ : Formula L} : Proof α Γ φ -> Nonempty (ProofT
   | mp p1 p2 => match hasTree p1, hasTree p2 with
     | .intro t1, .intro t2 => .intro (.mp t1 t2)
 
-def ProofTree.vars {Γ} {φ : Formula L} : ProofTree α Γ φ -> Finset Idx
+def ProofTree.vars {Γ} {φ : Formula L} : ProofTree α Γ φ -> Set Idx
   | asp .. | axm .. => φ.vars
   | mp px py => vars px ∪ vars py
 
@@ -162,24 +162,6 @@ theorem ProofTree.toSeq_checked {Γ} {φ : Formula L} (p : ProofTree α Γ φ) :
       rwa [←h4] at h2
     | [], _  => rw [h5] at h3; unfold check at h3; contradiction
     | _, [] => rw [h6] at h1; unfold check at h1; contradiction
-
-def ProofSeq.allVars (σ : ProofSeq L α) : Finset Idx :=
-  (σ.map (·.2.vars) |> List.toFinset).biUnion id
-
-lemma ProofSeq.fresh_not_mem_vars {α : Type} (σ : ProofSeq L α) :
-    ∀ k : Fin σ.length, Freshable.fresh σ.allVars ∉ σ[k].2.vars := by
-  intro n
-  suffices h : σ[n].2.vars ⊆ σ.allVars by
-    apply Finset.not_mem_subset h
-    apply Freshable.fresh_is_new
-  dsimp only [allVars]
-  intro k h
-  simp only [Finset.mem_biUnion, List.mem_toFinset, id]
-  use σ[n].2.vars
-  constructor
-  · rw [List.mem_map]; use σ[n]
-    exact ⟨List.getElem_mem n.prop, rfl⟩
-  · exact h
 
 end runtime
 

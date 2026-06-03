@@ -145,19 +145,17 @@ end eq
 section subst
 
 namespace Term
-def vars : Term L -> Finset Idx
+def vars : Term L -> Set Idx
   | var i => {i}
-  | app n s => (Finset.univ : Finset (Fin (L.funcs n))).biUnion
-    fun k => (s k).vars
+  | app _ s => Set.iUnion fun k => (s k).vars
 
 def varList : Term L -> List Idx
   | var i => [i]
   | app n s => (List.finRange (L.funcs n)).flatMap fun k => (s k).varList
 
-def funs [DecidableEq LF] : Term L -> Finset LF
+def funs : Term L -> Set LF
   | var _ => ∅
-  | app f s => insert f <|
-    (Finset.univ : Finset (Fin (L.funcs f))).biUnion fun k => funs (s k)
+  | app f s => insert f <| ⋃ k, funs (s k)
 
 def subst (i : Idx) (t : Term L) : Term L -> Term L
   | var j => if i = j then t else .var j
@@ -170,12 +168,28 @@ def substFun [DecidableEq LF] (t : Term L) (f : LF) : Term L -> Term L
 end Term
 
 namespace Formula
-def vars : Formula L -> Finset Idx
-  | atom n s =>
-    (Finset.univ : Finset (Fin (L.preds n))).biUnion fun k => (s k).vars
+def vars : Formula L -> Set Idx
+  | atom _ s => ⋃ k, (s k).vars
   | falsum => ∅
   | impl φ ψ => φ.vars ∪ ψ.vars
   | fall i φ => insert i φ.vars
+
+def fvar : Formula L -> Set Idx
+  | atom _ s => ⋃ k, (s k).vars
+  | falsum => ∅
+  | impl φ ψ => φ.fvar ∪ ψ.fvar
+  | fall i φ => φ.fvar \ {i}
+
+def bvar : Formula L -> Set Idx
+  | atom .. | falsum => ∅
+  | impl φ ψ => φ.bvar ∪ ψ.bvar
+  | fall i φ => insert i φ.bvar
+
+def funs [DecidableEq LF] : Formula L -> Set LF
+  | atom _ s => ⋃ k, Term.funs (s k)
+  | falsum => ∅
+  | impl φ ψ => funs φ ∪ funs ψ
+  | fall _ φ => funs φ
 
 def varList : Formula L -> List Idx
   | atom n s => (List.finRange (L.preds n)).flatMap fun k => (s k).varList
@@ -183,45 +197,37 @@ def varList : Formula L -> List Idx
   | impl φ ψ => φ.varList ++ ψ.varList
   | fall i φ => i :: φ.varList
 
-def fVars : Formula L -> Finset Idx
-  | atom n args =>
-    (Finset.univ : Finset (Fin (L.preds n))).biUnion
-      fun k => (args k).vars
-  | falsum => ∅
-  | impl φ ψ => φ.fVars ∪ ψ.fVars
-  | fall i φ => φ.fVars.erase i
+def fvarList : Formula L -> List Idx
+  | atom n s => (List.finRange (L.preds n)).flatMap fun k => (s k).varList
+  | falsum => []
+  | impl φ ψ => φ.fvarList ++ ψ.fvarList
+  | fall i φ => φ.fvarList.removeAll [i]
 
-def bVars : Formula L -> Finset Idx
-  | atom .. | falsum => ∅
-  | impl φ ψ => (bVars φ) ∪ (bVars ψ)
-  | fall i φ => insert i (bVars φ)
-
-def funs [DecidableEq LF] : Formula L -> Finset LF
-  | atom p s => (Finset.univ : Finset (Fin (L.preds p))).biUnion fun k => Term.funs (s k)
-  | falsum => ∅
-  | impl φ ψ => funs φ ∪ funs ψ
-  | fall _ φ => funs φ
+def bvarList : Formula L -> List Idx
+  | atom .. | falsum => []
+  | impl φ ψ => φ.bvarList ++ ψ.bvarList
+  | fall i φ => i :: φ.bvarList
 
 def FreeFor (i : Idx) (t : Term L) : Formula L -> Prop
   | atom .. | falsum => True
   | impl φ ψ => φ.FreeFor i t ∧ ψ.FreeFor i t
-  | fall j φ => i = j ∨ i ∉ φ.fVars ∨ j ∉ t.vars ∧ φ.FreeFor i t
+  | fall j φ => i = j ∨ i ∉ φ.fvar ∨ j ∉ t.vars ∧ φ.FreeFor i t
 
 theorem out_var_FreeFor_term {i : Idx} (t : Term L) {φ : Formula L} :
-    i ∉ φ.fVars -> φ.FreeFor i t := by
+    i ∉ φ.fvar -> φ.FreeFor i t := by
   intro h
   induction φ with
   | atom | falsum => unfold FreeFor; exact .intro
   | impl ψ χ ha hb =>
-    simp [fVars] at h
+    simp [fvar] at h
     unfold FreeFor
     exact ⟨ha h.left, hb h.right⟩
   | fall j ψ _ =>
-    simp only [fVars, Finset.mem_erase, ne_eq, not_and] at h
+    simp only [fvar, Set.mem_diff, Set.mem_singleton_iff, not_and, Decidable.not_not] at h
     unfold FreeFor
     by_cases h' : i = j
     · left; exact h'
-    · right; left; exact h h'
+    · right; left; exact fun h0 => h' (h h0)
 
 def subst (i : Idx) (t : Term L) (φ : Formula L) (h : φ.FreeFor i t) : Formula L :=
   match φ with
@@ -246,10 +252,7 @@ def substFun [DecidableEq LF] (t : Term L) (f : LF) : Formula L -> Formula L
 end Formula
 end subst
 
-def Formula.close (φ : Formula L) : Formula L :=
-  φ.fVars.sort.foldr fall φ
-
-def Sentence (L : Lang LF LP) := { φ : Formula L // φ.fVars = ∅ }
+def Sentence (L : Lang LF LP) := { φ : Formula L // φ.fvar = ∅ }
 instance : Coe (Sentence L) (Formula L) := ⟨fun x => x.val⟩
 
 section depth
