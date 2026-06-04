@@ -45,7 +45,7 @@ theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula
     rw [false_iff]
     by_contra
     apply hk.mc.left
-    exact .asp (α := FOLAxioms L) .falsum this
+    exact FOL.AS this
   | impl x y =>
     unfold interpret
     unfold depth at hd
@@ -54,7 +54,7 @@ theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula
     constructor
     · intro p
       by_cases h : x ∈ Δ
-      · have p' := Proof.axm (α := FOLAxioms L) (Γ := Δ) (.h1 y x)
+      · have p' := FOL.AX Δ (.h1 y x)
         exact .mp p' (p h)
       · have p1 := (hk.mc.right x).resolve_left h
         rw [maxConSet_iff Δ _ hk.mc] at p1
@@ -88,9 +88,9 @@ theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula
       have ⟨q, r⟩ := Proof.loose_equiv i t ψ
       replace r := Proof.impl_all_intro i r
       conv at r => rw [Set.singleton_def]; dsimp [insert]; rw [Proof.deduction]
-      replace r := Proof.monotone (Set.empty_subset Δ) r
+      replace r := FOL.mono (Set.empty_subset Δ) r
       replace p := Proof.mp r p
-      have p' := Proof.axm (Γ := Δ) <| FOLAxioms.q2 i t (loose t i ψ) (loose_FreeFor ..)
+      have p' := FOL.AX (Γ := Δ) <| FOLAxioms.q2 i t (loose t i ψ) (loose_FreeFor ..)
       replace p := Proof.mp p' p
       replace p := (m _).mpr p
       unfold depth at hd
@@ -98,7 +98,12 @@ theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula
         interpret_subst, Term.interpret_termModel] at p
       apply soundness _ _ q _ (TermModel Δ) (replace Term.var i t)
       intro g hg
-      rw [Set.mem_singleton_iff] at hg
-      rw [hg]
-      exact p
+      rw [Set.mem_union, Set.mem_singleton_iff] at hg
+      rcases hg with h' | h'
+      · rw [h']
+        exact p
+      · rw [FOL.from_FOL_axiom] at h'
+        obtain ⟨a, ha⟩ := h'
+        replace h' := soundness_axiom (TermModel Δ) (replace Term.var i t) a
+        rwa [ha] at h'
 end PrimaryLogic

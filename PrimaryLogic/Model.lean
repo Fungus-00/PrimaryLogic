@@ -2,10 +2,10 @@ import PrimaryLogic.Vars
 
 namespace PrimaryLogic
 
-variable {LF LP : Type} {L : Lang LF LP} {α : Type} [Inhabited α]
+variable {LF LP : Type} {L : Lang LF LP} {α : Type u}
 
 @[ext]
-structure Structure (L : Lang LF LP) (α : Type) [Inhabited α] : Type where
+structure Structure (L : Lang LF LP) (α : Type u) : Type u where
   funMap : (n : LF) -> (Fin (L.funcs n) -> α) -> α
   relMap : (n : LP) -> (Fin (L.preds n) -> α) -> Prop
 
@@ -32,24 +32,24 @@ theorem Structure.models_reduce (M : Structure L α) (φ : Formula L) :
   unfold models; unfold Structure.satisfies; simp [Set.mem_empty_iff_false]
 
 def SemanticConsequence (Γ : Set (Formula L)) (φ : Formula L) : Prop :=
-  ∀ (α : Type) [Inhabited α] (M : Structure L α), M.satisfies Γ φ
+  ∀ (α : Type) (M : Structure L α), M.satisfies Γ φ
 infix:20 " ⊨ " => SemanticConsequence
 
 lemma SemanticConsequence.monotone {Γ Δ} (φ : Formula L) :
     Γ ⊆ Δ -> (Γ ⊨ φ) -> (Δ ⊨ φ) :=
-  fun h0 h1 β _ M s h2 =>
+  fun h0 h1 β M s h2 =>
     (h1 β M) s fun g hg => h2 g (Set.mem_of_subset_of_mem h0 hg)
 
 abbrev Formula.valid (φ : Formula L) := SemanticConsequence ∅ φ
 prefix:21 "⊨ " => Formula.valid
 
 def Satisfiable (Γ : Set (Formula L)) : Prop :=
-  ∃ (α : Type) (_ : Inhabited α) (M : Structure L α) (s : Assignment α),
+  ∃ (α : Type) (M : Structure L α) (s : Assignment α),
   ∀ g ∈ Γ, g.interpret M s
 
-def Mod (Γ : Set (Formula L)) (α : Type) [Inhabited α] := { M : Structure L α // M.modelsOf Γ }
+def Mod (Γ : Set (Formula L)) (α : Type*) := { M : Structure L α // M.modelsOf Γ }
 
-def ModAll (Γ : Set (Formula L)) : Type 1 := Σ (β : Type), Σ (_ : Inhabited β), Mod Γ β
+def ModAll (Γ : Set (Formula L)) : Type (u + 1) := Σ (β : Type u), Mod Γ β
 
 variable (M : Structure L α)
 def DefinableSet (φ : Formula L) := { s : Assignment α // φ.interpret M s }
@@ -80,7 +80,6 @@ lemma Term.interpret_replace_invariance {t : Term L} (s : Assignment α) (a : α
   rw [h] at hj
   exfalso
   exact hi hj
-
 theorem Formula.interpret_coincidence {φ : Formula L} (s t : Assignment α) :
     (∀ i ∈ φ.fvar, s i = t i) -> (φ.interpret M s <-> φ.interpret M t) := by
   intro h
@@ -118,7 +117,7 @@ theorem Formula.interpret_replace_invariance
   exfalso; exact hi hj
 
 /-- Classical needed -/
-theorem Structure.sentence_determinacy (φ : Formula L) : φ.fvar = ∅ ->
+theorem Structure.sentence_determinacy [Inhabited α] (φ : Formula L) : φ.fvar = ∅ ->
     (∀ s : Assignment α, φ.interpret M s) ∨ (∀ s : Assignment α, ¬ φ.interpret M s) := by
   intro h0
   let s0 : Assignment α := fun _ => Inhabited.default (α := α)

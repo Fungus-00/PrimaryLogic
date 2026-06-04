@@ -3,7 +3,7 @@ import PrimaryLogic.Vars
 namespace PrimaryLogic
 
 section theory
-variable {LF LP : Type} {L : Lang LF LP} (α : outParam Type) [AxiomSchema L α]
+variable {LF LP : Type} {L : Lang LF LP}
 
 /-- `Proof` type is designed for meta theorem proving, and note that is cannot recall subproofs,
   yet `ProofTree` retains them.
@@ -27,37 +27,27 @@ Under this circumstance, `.gen` becomes an axiom schema ensuring that an axiom i
 -/
 inductive Proof (Γ : Set (Formula L)) : Formula L → Prop
   | asp (φ) : φ ∈ Γ → Proof Γ φ
-  | axm (a : α) : Proof Γ (AxiomSchema.toFormula (L := L) a)
   | mp {φ ψ : Formula L} : Proof Γ (.impl φ ψ) → Proof Γ φ → Proof Γ ψ
 
 inductive ProofTree (Γ : Set (Formula L)) : Formula L → Type
   | asp (φ) : φ ∈ Γ → ProofTree Γ φ
-  | axm (a : α) : ProofTree Γ (AxiomSchema.toFormula (L := L) a)
   | mp {φ ψ : Formula L} : ProofTree Γ (.impl φ ψ) → ProofTree Γ φ → ProofTree Γ ψ
 
-def ProofTree.toProof {Γ} (φ : Formula L) : ProofTree α Γ φ -> Proof α Γ φ
+def ProofTree.toProof {Γ} (φ : Formula L) : ProofTree Γ φ -> Proof Γ φ
   | .asp φ h => .asp φ h
-  | .axm a => .axm a
   | .mp p q => .mp (p.toProof) (q.toProof)
 
-theorem Proof.hasTree {Γ} {φ : Formula L} : Proof α Γ φ -> Nonempty (ProofTree α Γ φ)
+theorem Proof.hasTree {Γ} {φ : Formula L} : Proof Γ φ -> Nonempty (ProofTree Γ φ)
   | asp x h => .intro (.asp x h)
-  | axm a => .intro (.axm a)
   | mp p1 p2 => match hasTree p1, hasTree p2 with
     | .intro t1, .intro t2 => .intro (.mp t1 t2)
 
-def ProofTree.vars {Γ} {φ : Formula L} : ProofTree α Γ φ -> Set Idx
-  | asp .. | axm .. => φ.vars
+def ProofTree.vars {Γ} {φ : Formula L} : ProofTree Γ φ -> Set Idx
+  | asp .. => φ.vars
   | mp px py => vars px ∪ vars py
 
 variable (m : Mor L) (c : VarContext L m.p) (ma : MorAx m c)
 
-structure AxiomTransform where
-  pass : α → Prop
-  transform : α → α
-  pass_valid : ∀ a : α, (AxiomSchema.toFormula (L := L) a).av m.p
-  invariance (a : α) :
-      AxiomSchema.toFormula (L := L) (transform a) = m.f (AxiomSchema.toFormula (L := L) a)
 /-
 variable {T : AxiomTransform α m}
 def ProofTree.transform {Γ φ} (hΓ : ∀ x ∈ Γ, x.av m.p) (hφ : φ.av m.p) :
@@ -65,7 +55,7 @@ def ProofTree.transform {Γ φ} (hΓ : ∀ x ∈ Γ, x.av m.p) (hφ : φ.av m.p)
   | axm a => cast (congrArg (ProofTree α _ ·) (T.invariance a)) <| .axm <| T.transform a
   | asp ψ h => .asp (m.f ψ) (Set.mem_image_of_mem m.f h)
   | mp (φ := x) (ψ := y) px py => .mp (ma.map_impl ▸ (transform sorry sorry px)) (transform py)
--/
+
 section runtime
 
 inductive ProofType : Type
@@ -163,16 +153,15 @@ theorem ProofTree.toSeq_checked {Γ} {φ : Formula L} (p : ProofTree α Γ φ) :
     | [], _  => rw [h5] at h3; unfold check at h3; contradiction
     | _, [] => rw [h6] at h1; unfold check at h1; contradiction
 
-end runtime
+end runtime-/
 
-def Inconsistent (Γ : Set (Formula L)) : Prop := Proof α Γ .falsum
-abbrev Consistent (Γ : Set (Formula L)) : Prop := ¬ Inconsistent α Γ
+def Inconsistent (Γ : Set (Formula L)) : Prop := Proof Γ .falsum
+abbrev Consistent (Γ : Set (Formula L)) : Prop := ¬ Inconsistent Γ
 
-theorem Proof.monotone {α : outParam Type} [AxiomSchema L α] {Γ Δ} {φ : Formula L} :
-  Γ ⊆ Δ -> Proof α Γ φ -> Proof α Δ φ := fun h p =>
+theorem Proof.monotone {Γ Δ} {φ : Formula L} :
+  Γ ⊆ Δ -> Proof Γ φ -> Proof Δ φ := fun h p =>
   match p with
   | asp ψ hi => asp ψ (h hi)
-  | axm a => axm a
   | mp p1 p2 => mp (p1.monotone h) (p2.monotone h)
 
 def Theory (L : Lang LF LP) := Set (Sentence L)

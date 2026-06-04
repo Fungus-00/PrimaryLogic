@@ -51,8 +51,28 @@ prefix:50 "¬" => Formula.not
 -- their usage in `Prop` type context.
 macro "∀" i:ident "# " φ:term : term => `(Formula.fall $i $φ)
 macro "∃" i:ident "# " φ:term : term => `(Formula.ex $i $φ)
-abbrev FOLProof := Proof (L := L) (FOLAxioms L)
+abbrev FOLTheory := instAxiomSchemaFOLAxioms.toSet (L := L)
+abbrev FOLProof (Γ : Set (Formula L)) := Proof (L := L) (Γ ∪ FOLTheory)
 infix:20 " ⊢ " => FOLProof
+
+namespace FOL
+@[simp]
+theorem from_FOL_axiom (φ : Formula L) : φ ∈ FOLTheory ↔ ∃ a : FOLAxioms L, a.toFormula = φ := by
+  unfold FOLTheory AxiomSchema.toSet AxiomSchema.toFormula instAxiomSchemaFOLAxioms
+  dsimp; rw [Set.mem_range]
+
+theorem axiom_proof {Γ : Set (Formula L)} {φ : Formula L} : φ ∈ FOLTheory -> (Γ ⊢ φ) :=
+  fun h => Proof.asp φ <| (Set.mem_union ..).mpr (.inr h)
+
+theorem mono {Γ Δ} {φ : Formula L} : Γ ⊆ Δ -> FOLProof Γ φ -> FOLProof Δ φ :=
+  fun h p => Proof.monotone (Set.union_subset_union_left _ h) p
+
+def AX (Γ : Set (Formula L)) (a : FOLAxioms L) : (FOLProof Γ a.toFormula) :=
+  .asp a.toFormula (by rw [Set.mem_union, from_FOL_axiom]; right; use a)
+
+def AS {Γ : Set (Formula L)} {φ : Formula L} (h : φ ∈ Γ) : FOLProof Γ φ :=
+  .asp φ ((Set.mem_union ..).mpr (Or.inl h))
+end FOL
 /-
 variable (m : Formula.axiomMor L)
 

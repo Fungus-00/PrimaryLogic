@@ -2,7 +2,7 @@ import PrimaryLogic.Model
 import PrimaryLogic.FirstOrder.Axiom
 
 namespace PrimaryLogic
-variable {LF LP : Type} {L : Lang LF LP} {α : Type} [Inhabited α]
+variable {LF LP : Type} {L : Lang LF LP} {α : Type u}
 
 lemma soundness_axiom (M : Structure L α) (s : Assignment α) (ax : FOLAxioms L) :
     ax.toFormula.interpret M s :=
@@ -17,10 +17,9 @@ lemma soundness_axiom (M : Structure L α) (s : Assignment α) (ax : FOLAxioms L
     fun s' _ => soundness_axiom M s' ax) s (by simp)
 
 /-- Classical needed, from `.q3` -/
-theorem soundness (Γ) (φ : Formula L) : (Γ ⊢ φ) -> (Γ ⊨ φ) :=
-  fun p α _ M s h => match p with
+theorem soundness (Γ) (φ : Formula L) : (Γ ⊢ φ) -> (Γ ∪ FOLTheory ⊨ φ) :=
+  fun p α M s h => match p with
   | .asp ψ g => h ψ g
-  | .axm ax => soundness_axiom M s ax
   | .mp (φ := φ) (ψ := ψ) p q =>
     (soundness Γ (φ → ψ) p α M s h) (soundness Γ φ q α M s h)
 

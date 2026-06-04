@@ -16,8 +16,10 @@ local instance Lx1 {α : Type*} [LE α] [DecidableLE α] [Max α]
     split <;> simp [*, LawfulOrderLeftLeaningMax.max_eq_left,
       LawfulOrderLeftLeaningMax.max_eq_right]
 
-open List in
-theorem List.max?_eq_some_iff'' {α a} [Max α] [LE α] [DecidableLE α]
+namespace List
+variable {α : Type u}
+
+theorem max?_eq_some_iff'' {a : α} [Max α] [LE α] [DecidableLE α]
     {xs : List α} [Std.IsLinearOrder (α)] [Std.LawfulOrderMax α] :
     xs.max? = some a ↔ a ∈ xs ∧ ∀ b, b ∈ xs → b ≤ a := by
   constructor
@@ -31,29 +33,17 @@ theorem List.max?_eq_some_iff'' {α a} [Max α] [LE α] [DecidableLE α]
         (h₂ _ (max?_mem (xs := x :: xs) rfl))
         ((max?_le_iff (xs := x :: xs) rfl).1 (Std.le_refl _) _ h₁)
 
-theorem List.eq_nil_iff_forall_not_mem' {α} {l : List α} : l = [] ↔ ∀ a, a ∉ l := by
+theorem eq_nil_iff_forall_not_mem' {l : List α} : l = [] ↔ ∀ a, a ∉ l := by
   cases l <;> simp only [List.not_mem_nil, not_false_eq_true, implies_true, reduceCtorEq,
     List.mem_cons, forall_eq_or_imp, imp_false, false_and]
 
-theorem Nat.add_eq_left' {a b : Nat} : a + b = a ↔ b = 0 := by
-  constructor
-  · intro h
-    induction a with
-    | zero => rwa [Nat.zero_add] at h
-    | succ n ha =>
-      conv at h =>
-        lhs; rw [Nat.add_assoc]
-        conv => rhs; rw [Nat.add_comm]
-        rw [←Nat.add_assoc]
-      exact ha (Nat.add_right_cancel h)
-  · intro h; rw [h]; apply Nat.add_zero
-
 open List in
-theorem List.mem_dedup' {α : Type*} [DecidableEq α] {a : α} {l : List α} : a ∈ dedup l ↔ a ∈ l := by
+theorem mem_dedup' [DecidableEq α] {a : α} {l : List α} : a ∈ dedup l ↔ a ∈ l := by
   have := not_congr (@forall_mem_pwFilter α (· ≠ ·) _ ?_ a l)
   · simpa only [dedup, forall_mem_ne, Decidable.not_not] using this
   · intro x y z xz
     exact Decidable.not_and_iff_not_or_not.1 <| mt (fun h ↦ h.1.trans h.2) xz
+end List
 
 namespace Set
 variable {α β : Type*} {s t u : Set α}
@@ -164,7 +154,19 @@ theorem image_insert_eq' {f : α → β} {a : α} :
 end Set
 
 namespace Nat
-open Lean Meta Simp
+theorem add_eq_left' {a b : Nat} : a + b = a ↔ b = 0 := by
+  constructor
+  · intro h
+    induction a with
+    | zero => rwa [Nat.zero_add] at h
+    | succ n ha =>
+      conv at h =>
+        lhs; rw [Nat.add_assoc]
+        conv => rhs; rw [Nat.add_comm]
+        rw [←Nat.add_assoc]
+      exact ha (Nat.add_right_cancel h)
+  · intro h; rw [h]; apply Nat.add_zero
+
 lemma bodd_add_div2' : ∀ n, (bodd n).toNat + 2 * div2 n = n
   | 0 => rfl
   | succ n => by
