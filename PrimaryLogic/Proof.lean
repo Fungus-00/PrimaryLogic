@@ -33,7 +33,8 @@ Under this circumstance, `.gen` becomes an axiom schema ensuring that an axiom i
 - `mp`: the unique inference rule
 -/
 inductive Proof (Γ : Set (Formula L)) : Formula L → Prop
-  | asp (φ) : φ ∈ Γ → Proof Γ φ | mp {φ ψ : Formula L} : Proof Γ (.impl φ ψ) → Proof Γ φ → Proof Γ ψ
+  | asp (φ) : φ ∈ Γ → Proof Γ φ
+  | mp {φ ψ : Formula L} : Proof Γ (.impl φ ψ) → Proof Γ φ → Proof Γ ψ
 
 variable (α : Type) [AxiomSchema L α]
 
@@ -61,10 +62,10 @@ def ProofTree.varList {Γ} {φ : Formula L} : ProofTree α Γ φ -> List Idx
   | axm a => AxiomSchema.varList L a
   | mp px py => varList px ++ varList py
 
-def ProofTree.mem_target_varList {Γ φ} (p : ProofTree α Γ φ) :
-    φ.varList ⊆ p.varList (L := L) := by
+lemma ProofTree.mem_target_varList {Γ φ} (t : ProofTree α Γ φ) :
+    φ.varList ⊆ t.varList (L := L) := by
   intro h
-  induction p with
+  induction t with
   | asp x _ => unfold varList; intro v; exact v
   | axm a => unfold varList; intro v; exact AxiomSchema.subset_varList a v
   | @mp x y p1 p2 h1 h2 =>
@@ -72,6 +73,32 @@ def ProofTree.mem_target_varList {Γ φ} (p : ProofTree α Γ φ) :
     rw [List.mem_append] at h1 ⊢
     intro h3
     exact .inl <| h1 (.inr h3)
+
+def ProofTree.assumptions {Γ} {φ : Formula L} : ProofTree α Γ φ -> Set (Formula L)
+  | asp x _ => {x}
+  | axm _ => ∅
+  | mp x y => assumptions x ∪ assumptions y
+
+lemma ProofTree.assumptions_subset {Γ} {φ : Formula L} (t : ProofTree α Γ φ) :
+    t.assumptions ⊆ Γ := by
+  induction t with
+  | asp x h => exact Set.singleton_subset_iff.mpr h
+  | axm => exact Set.empty_subset Γ
+  | mp x y hx hy => exact Set.union_subset hx hy
+
+lemma ProofTree.assumptions_vars_subset {Γ} {φ : Formula L} (t : ProofTree α Γ φ) :
+    ∀ x ∈ t.assumptions, x.varList ⊆ t.varList := by
+  intro ψ hi
+  induction t with
+  | asp x h =>
+    unfold varList; unfold assumptions at hi
+    rw [Set.mem_singleton_iff] at hi; rw [hi]; apply List.Subset.refl
+  | axm a => exfalso; exact Set.notMem_empty ψ hi
+  | mp x y hx hy =>
+    unfold varList
+    rcases hi with h | h
+    · exact List.subset_append_of_subset_left _ (hx h)
+    · exact List.subset_append_of_subset_right _ (hy h)
 
 def Inconsistent (Γ : Set (Formula L)) : Prop := Proof Γ .falsum
 abbrev Consistent (Γ : Set (Formula L)) : Prop := ¬ Inconsistent Γ
@@ -81,6 +108,36 @@ theorem Proof.monotone {Γ Δ} {φ : Formula L} :
   match p with
   | asp ψ hi => asp ψ (h hi)
   | mp p1 p2 => mp (p1.monotone h) (p2.monotone h)
+
+def ProofTree.monotone {Γ Δ} {φ : Formula L} :
+  Γ ⊆ Δ -> ProofTree α Γ φ -> ProofTree α Δ φ := fun h p =>
+  match p with
+  | asp ψ hi => asp ψ (h hi)
+  | axm a => axm a
+  | mp p1 p2 => mp (p1.monotone h) (p2.monotone h)
+
+lemma ProofTree.monotone_varList_eq {Γ Δ} {φ : Formula L} (t : ProofTree α Γ φ) (h : Γ ⊆ Δ) :
+    (t.monotone h).varList = t.varList := by
+  induction t with
+  | asp | axm => rfl
+  | mp x y hx hy => unfold monotone varList; rw [hx, hy]
+
+def ProofTree.compress {Γ} {φ : Formula L} (t : ProofTree α Γ φ) :
+    ProofTree α (t.assumptions) φ :=
+  match t with
+  | .asp x h => asp x (Set.mem_singleton _)
+  | .axm a => axm a
+  | .mp px py => mp
+    (monotone Set.subset_union_left <| compress px)
+    (monotone Set.subset_union_right <| compress py)
+
+theorem ProofTree.compress_varList_eq {Γ} {φ : Formula L} (t : ProofTree α Γ φ) :
+    t.compress.varList = t.varList := by
+  induction t with
+  | asp | axm => rfl
+  | mp x y px py =>
+    unfold compress varList
+    rw [monotone_varList_eq, monotone_varList_eq, px, py]
 
 def Theory (L : Lang LF LP) := Set (Sentence L)
 

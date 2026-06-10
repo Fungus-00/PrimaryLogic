@@ -166,6 +166,10 @@ theorem image_insert_eq' {f : α → β} {a : α} :
     · left; symm; exact h1
     · right; exact h2
 
+lemma image_mono' {f : α → β} (h : s ⊆ t) : f '' s ⊆ f '' t := by
+  simp only [subset_def, mem_image, forall_exists_index, and_imp, forall_apply_eq_imp_iff₂]
+  rw [subset_def] at h; intro a hs; use a; exact ⟨h a hs, rfl⟩
+
 end Set
 
 namespace Nat

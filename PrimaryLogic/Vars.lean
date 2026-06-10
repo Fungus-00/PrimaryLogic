@@ -595,6 +595,28 @@ theorem Formula.varMap_subst (hf : PartInj p f) {i : Idx} {t : Term L} {φ : For
       simp only [h1, false_or] at h
       exact h' _ hi.right
 
+theorem Term.varMap_eq {f g : Idx → Idx} {t : Term L} (h : ∀ i ∈ t.vars, f i = g i) :
+    t.varMap f = t.varMap g := by
+  induction t with
+  | var i => unfold varMap; congr; exact h i (Set.mem_singleton _)
+  | app n s h' =>
+    unfold varMap; congr; funext k
+    exact h' k fun j hj => h j <| Set.mem_iUnion_of_mem k hj
+
+theorem Formula.varMap_eq {f g : Idx → Idx} {φ : Formula L} (h : ∀ i ∈ φ.vars, f i = g i) :
+    φ.varMap f = φ.varMap g := by
+  induction φ with
+  | atom n s =>
+    unfold varMap; congr; funext k
+    exact Term.varMap_eq fun j hj => h j <| Set.mem_iUnion_of_mem k hj
+  | falsum => dsimp [varMap]
+  | impl x y hx hy =>
+    unfold varMap; simp only [vars, Set.mem_union] at h
+    rw [hx fun j hj => h j (.inl hj), hy fun j hj => h j (.inr hj)]
+  | fall i ψ h' =>
+    unfold varMap; simp only [vars, Set.mem_insert_iff] at h
+    rw [h i (.inl rfl), h' fun j hj => h j (.inr hj)]
+
 structure VarContext (L : Lang LF LP) (p : Idx → Prop) where
   i : Idx := 0
   t : Term L := .var i
@@ -626,8 +648,8 @@ structure MorAx (m : Mor L) (c : VarContext L m.p) : Prop where
   map_subst (h) :
     m.f (subst c.i c.t c.φ h) = subst (m.ι c.i) (m.τ c.t) (m.f c.φ) (free_for h)
 
-def Formula.varMor {p d} {f : Idx → Idx} (pd : p d)
-    (hf : PartInj p f) (L : Lang LF LP) : Mor L where
+def Formula.varMor (L : Lang LF LP) {p d} {f : Idx → Idx} (pd : p d)
+    (hf : PartInj p f) : Mor L where
   d := d
   p := p
   ι := f
@@ -637,7 +659,7 @@ def Formula.varMor {p d} {f : Idx → Idx} (pd : p d)
   inj_ι := hf
 
 def Formula.varMorAx {p f d} (pd : p d) (hf : PartInj p f) (c : VarContext L p) :
-    MorAx (varMor pd hf L) c where
+    MorAx (varMor L pd hf) c where
   map_τvars := Term.varMap_vars c.t
   map_fvars := Formula.varMap_vars c.φ
   map_falsum := rfl

@@ -32,6 +32,12 @@ instance [inst : DecidableEq α] {a : α} : DecidablePred ({a} : Set α) := by
   have h := inst x a
   rw [←Set.mem_singleton_iff] at h
   exact h
+
+theorem Set.image_eq_from {α β : Type*} {f g : α → β} {s : Set α} (h : ∀ x ∈ s, f x = g x) :
+    f '' s = g '' s := by
+  ext b; simp only [Set.mem_image]; constructor
+  · rintro ⟨a, h1, h2⟩; use a; rw [←h2]; exact ⟨h1, (h a h1).symm⟩
+  · rintro ⟨a, h1, h2⟩; use a; rw [←h2]; exact ⟨h1, (h a h1)⟩
 end decSet
 
 section lem
@@ -468,10 +474,11 @@ private def extractSub (p : α → Prop) [DecidablePred p] : List α → List (S
   | [] => []
   | a :: l => if h : p a then ⟨a, h⟩ :: extractSub p l else extractSub p l
 
-private def pass (p : α → Prop) [DecidablePred p] (l : List α) : List (Subtype p) :=
+def _root_.List.pass (p : α → Prop) [DecidablePred p] (l : List α) : List (Subtype p) :=
   (extractSub p l).dedup
 
-private lemma pass_valid {p : α → Prop} [DecidablePred p] {l : List α} {a : α}
+open List
+lemma pass_valid {p : α → Prop} [DecidablePred p] {l : List α} {a : α}
     (hl : a ∈ l) (hp : p a) : ⟨a, hp⟩ ∈ pass p l := by
   simp only [pass, List.mem_dedup']
   induction l with
@@ -488,7 +495,7 @@ private lemma pass_valid {p : α → Prop} [DecidablePred p] {l : List α} {a : 
       · subst h2; exfalso; exact h1 hp
       · exact h h3
 
-private lemma pass_uni (p : α → Prop) [DecidablePred p] {l : List α} :
+lemma pass_uni (p : α → Prop) [DecidablePred p] {l : List α} :
     let s := pass p l; ∀ {m n : Nat}, ∀ hm : m < s.length, ∀ hn : n < s.length,
     s[m]'hm = s[n]'hn → m = n := fun _ _ h =>
   Fin.val_inj.mpr <| (List.Nodup.get_inj_iff <| List.nodup_dedup <| extractSub p l).mp h

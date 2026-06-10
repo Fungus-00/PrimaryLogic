@@ -128,11 +128,10 @@ theorem Lindenbaum : Con Γ -> MaximalConsistent (maxExpand Γ) := by
         contradiction
 end maximal_con
 
-variable {m : Mor L} (η : (c : VarContext L m.p) → MorAx m c)
-
-def ProofTree.map {φ : Formula L} (p : ProofTree (FOLAxioms L) Γ φ) (hp : ∀ i ∈ p.varList, m.p i) :
+def ProofTree.transform {m : Mor L} (η : (c : VarContext L m.p) → MorAx m c) {φ : Formula L}
+    (t : ProofTree (FOLAxioms L) Γ φ) (hp : ∀ i ∈ t.varList, m.p i) :
     ProofTree (FOLAxioms L) (m.f '' Γ) (m.f φ) :=
-  match p with
+  match t with
   | .asp ψ h => .asp (m.f ψ) <| (Set.mem_image ..).mp ⟨ψ, h, rfl⟩
   | .axm a => FOLAxioms.transform_eq η a (fun i h => hp i <| (FOLAxioms.vars_eq_list ..).mp h)
     ▸ .axm (Γ := m.f '' Γ) (a.transform η _)
@@ -147,7 +146,38 @@ def ProofTree.map {φ : Formula L} (p : ProofTree (FOLAxioms L) Γ φ) (hp : ∀
     have he : m.f (x → y) = ((m.f x) → (m.f y)) := MorAx.map_impl <| FOLAxioms.gm η
       (x := ⟨x, hv.1⟩) (y := ⟨y, hv.2⟩)
     .mp (φ := m.f x) (ψ := m.f y)
-      (he ▸ map p1 fun i h => hp i <| List.mem_append.mpr <| Or.inl h)
-      (map p2 fun i h => hp i <| List.mem_append.mpr <| Or.inr h)
+      (he ▸ transform η p1 fun i h => hp i <| List.mem_append.mpr <| Or.inl h)
+      (transform η p2 fun i h => hp i <| List.mem_append.mpr <| Or.inr h)
+
+def ProofTree.map {p} [DecidablePred p] [fr : Freshable (Subtype p)] {f : Idx → Idx}
+    (hf : PartInj p f) {Γ : Set (Formula L)} (hΓ : ∀ φ ∈ Γ, φ.vars ⊆ p) {φ : Formula L}
+    (hφ : φ.vars ⊆ p) : ProofTree (FOLAxioms L) Γ φ ->
+    ProofTree (FOLAxioms L) ((Formula.varMap f) '' Γ) (Formula.varMap f φ) := fun t =>
+  let d := (fr.fresh []).val
+  let s := d :: t.varList
+  let q (i : Idx) : Prop := i ∈ s
+  let g (i : Idx) : Idx := f <| (s.canonize p i).val
+  let h' : PartInj q g := fun {x y} hx hy he => List.canonize_PartInj s hx hy
+    <| Subtype.ext <| hf (s.canonize p x).prop (s.canonize p y).prop he
+  let m : Mor L := Formula.varMor L List.mem_cons_self h'
+  let η (c : VarContext L m.p) : MorAx m c := Formula.varMorAx List.mem_cons_self h' c
+  have h1 : Formula.varMap g '' t.assumptions = Formula.varMap f '' t.assumptions :=
+    Set.image_eq_from fun ψ h => Formula.varMap_eq fun i hi => congrArg f
+    <| Subtype.ext_iff.mp
+    <| List.canonize_invariance
+      (List.mem_cons_of_mem d
+      <| assumptions_vars_subset t ψ h
+      <| (Formula.vars_eq_list ..).mp hi)
+    <| (Set.subset_def ▸ hΓ ψ <| assumptions_subset t h) i hi
+  have h2 : Formula.varMap g φ = Formula.varMap f φ :=
+    Formula.varMap_eq fun i hi => congrArg f
+    <| Subtype.ext_iff.mp
+    <| List.canonize_invariance
+      (List.mem_cons_of_mem d <| mem_target_varList t <| (Formula.vars_eq_list ..).mp hi)
+    <| (Set.subset_def ▸ hφ) i hi
+  let r : ProofTree (FOLAxioms L) (Formula.varMap f '' t.assumptions) (Formula.varMap f φ) :=
+    h1 ▸ h2 ▸ transform t.assumptions η t.compress
+      fun _ h => List.mem_cons_of_mem d (compress_varList_eq t ▸ h)
+  monotone (Set.image_mono' <| assumptions_subset t) r
 
 end PrimaryLogic
