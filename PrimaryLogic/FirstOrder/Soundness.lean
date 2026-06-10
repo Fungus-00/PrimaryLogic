@@ -13,7 +13,7 @@ lemma soundness_axiom (M : Structure L α) (s : Assignment α) (ax : FOLAxioms L
   | .q1 i x y => fun ha hb a => ha a (hb a)
   | .q2 i t x g => fun h =>  (Formula.interpret_subst M s g).mpr (h _)
   | .q3 i x g => fun h a => (Formula.interpret_replace_invariance M s a g).mpr h
-  | .gen i ax => (Structure.satisfies_gen_intro M ∅ (FOLAxioms.toFormula L ax) i (by simp)
+  | .gen i ax => (Structure.satisfies_gen_intro M ∅ (FOLAxioms.toFormula ax) i (by simp)
     fun s' _ => soundness_axiom M s' ax) s (by simp)
 
 /-- Classical needed, from `.q3` -/

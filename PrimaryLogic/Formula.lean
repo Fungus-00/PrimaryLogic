@@ -39,12 +39,6 @@ inductive Formula (L : Lang LF LP) : Type
 instance : Inhabited (Term L) := ⟨.var 0⟩
 instance : Inhabited (Formula L) := ⟨.falsum⟩
 
-class AxiomSchema (L : Lang LF LP) (α : Type) where
-  toFormula : α -> Formula L
-
-def AxiomSchema.toSet (α : Type) [AxiomSchema L α] : Set (Formula L) :=
-  Set.range fun a : α => AxiomSchema.toFormula (L := L) a
-
 def Term.isConst : Term L -> Prop
   | var _ => False
   | app n _ => L.funcs n = 0

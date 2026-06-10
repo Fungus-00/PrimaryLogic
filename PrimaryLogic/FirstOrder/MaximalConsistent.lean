@@ -1,12 +1,12 @@
 import PrimaryLogic.Encoding
 import PrimaryLogic.FirstOrder.Theorem
-import PrimaryLogic.FirstOrder.Soundness
 
 namespace PrimaryLogic
 variable {LF LP : Type} {L : Lang LF LP} (Γ : Set (Formula L))
 
-private abbrev InCon : Prop := Inconsistent (Γ ∪ FOLTheory)
-private abbrev Con : Prop := Consistent (Γ ∪ FOLTheory)
+section maximal_con
+abbrev InCon : Prop := Inconsistent (Γ ∪ FOLTheory)
+abbrev Con : Prop := Consistent (Γ ∪ FOLTheory)
 
 def MaximalConsistent : Prop := Con Γ ∧ (∀ φ, φ ∈ Γ ∨ (¬φ) ∈ Γ)
 
@@ -26,16 +26,7 @@ theorem maxConSet_iff (Γ : Set (Formula L)) (φ : Formula L) :
     rcases m.right φ with h1 | h2
     · exact h1
     · exfalso; exact h' h2
-/-
-lemma con_empty : Con (L := L) ∅ := by
-  unfold Con Consistent Inconsistent
-  by_contra
-  have h1 := soundness _ _ this
-  have h2 := h1 Unit ⟨fun _ _ => .unit, fun _ _ => False⟩ (fun _ => .unit)
-    fun x h => False.elim <| Set.notMem_empty x h
-  unfold Formula.interpret at h2
-  exact h2
--/
+
 variable [Encodable LF] [Encodable LP] [DecidablePred (InCon (L := L))]
 
 def tryAdd (n : Nat) : Set (Formula L) :=
@@ -88,6 +79,7 @@ lemma expandAdd_monotone (m n : Nat) : m ≤ n -> expand Γ m ⊆ expand Γ n :=
       exact tryAdd_monotone _
 
 private abbrev maxExpand := ⋃ n : Nat, expand Γ n
+
 lemma maximalSet_compact (φ : Formula L) : (maxExpand Γ ⊢ φ) -> ∃ n : Nat, expand Γ n ⊢ φ := by
   intro p
   induction p with
@@ -134,4 +126,28 @@ theorem Lindenbaum : Con Γ -> MaximalConsistent (maxExpand Γ) := by
         simp only [expand, tryAdd, h2, h4] at h3
         have := Set.mem_insert φ (expand Γ n)
         contradiction
+end maximal_con
+
+variable {m : Mor L} (η : (c : VarContext L m.p) → MorAx m c)
+
+def ProofTree.map {φ : Formula L} (p : ProofTree (FOLAxioms L) Γ φ) (hp : ∀ i ∈ p.varList, m.p i) :
+    ProofTree (FOLAxioms L) (m.f '' Γ) (m.f φ) :=
+  match p with
+  | .asp ψ h => .asp (m.f ψ) <| (Set.mem_image ..).mp ⟨ψ, h, rfl⟩
+  | .axm a => FOLAxioms.transform_eq η a (fun i h => hp i <| (FOLAxioms.vars_eq_list ..).mp h)
+    ▸ .axm (Γ := m.f '' Γ) (a.transform η _)
+  | .mp (φ := x) (ψ := y) p1 p2 =>
+    have hv : x.vars ⊆ m.p ∧ y.vars ⊆ m.p := Set.union_subset_iff.mp
+      fun i h => hp i
+      <| List.mem_append.mpr
+      <| Or.inl
+      <| (List.subset_def.mp <| ProofTree.mem_target_varList p1)
+      <| (Formula.vars_eq_list ..).mp
+      <| Or.elim h (.inl ·) (.inr ·)
+    have he : m.f (x → y) = ((m.f x) → (m.f y)) := MorAx.map_impl <| FOLAxioms.gm η
+      (x := ⟨x, hv.1⟩) (y := ⟨y, hv.2⟩)
+    .mp (φ := m.f x) (ψ := m.f y)
+      (he ▸ map p1 fun i h => hp i <| List.mem_append.mpr <| Or.inl h)
+      (map p2 fun i h => hp i <| List.mem_append.mpr <| Or.inr h)
+
 end PrimaryLogic

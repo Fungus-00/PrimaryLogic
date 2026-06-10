@@ -44,10 +44,15 @@ axiom dne {p : Prop} : ¬¬p → p
 
 theorem lem (p : Prop) : p ∨ ¬p := dne_iff_lem.mp (@dne ·) p
 
-lemma or_dec {p : Prop} (e : p ∨ ¬ p) : Nonempty (Decidable p) :=
+lemma or_dec {p : Prop} (e : p ∨ ¬p) : Nonempty (Decidable p) :=
   Or.rec (.intro <| isTrue ·) (.intro <| isFalse ·) e
 
 theorem ndec (p : Prop) : Nonempty (Decidable p) := or_dec (lem p)
+
+theorem not_forall {α : Sort u} {p : α → Prop} : (¬∀ x, p x) ↔ ∃ x, ¬p x where
+  mp h1 := Or.elim (lem (∃ x, ¬p x)) id fun h =>
+    False.elim <| h1 <| fun a => dne fun h2 => h <| .intro a h2
+  mpr h1 h2 := h1.elim fun a h => False.elim <| h (h2 a)
 end lem
 
 section forall_in
@@ -253,8 +258,8 @@ namespace PartInj
 theorem ne (hf : PartInj p f) {x y : α} : p x → p y → x ≠ y → f x ≠ f y :=
   fun hx hy => mt fun h => hf hx hy h
 
-theorem mem_set_image (hf : PartInj p f) {s : Set α} {a : α}
-    (hs : ∀ x ∈ s, p x) : p a → (f a ∈ s.image f ↔ a ∈ s) := fun h => by
+theorem mem_set_image (hf : PartInj p f) {s : Set α} {a : α} (hs : ∀ x ∈ s, p x) :
+    p a → (f a ∈ s.image f ↔ a ∈ s) := fun h => by
   rw [Set.mem_image]
   constructor
   · intro ⟨b, ⟨h1, h2⟩⟩

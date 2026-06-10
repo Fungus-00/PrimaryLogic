@@ -107,7 +107,7 @@ theorem gen_rule (φ : Formula L) (i : Idx) :
     · exact (AX Γ (.q3 i ψ <| hg ψ h1)).mp (asp ψ (.inl h1))
     · apply asp (.fall i ψ)
       rw [Set.mem_union]; right
-      rw [from_FOL_axiom] at h2 ⊢
+      rw [mem_theory_iff] at h2 ⊢
       obtain ⟨y, h3⟩ := h2
       use .gen i y
       unfold FOLAxioms.toFormula

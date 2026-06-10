@@ -51,6 +51,10 @@ variable {α β : Type*} {s t u : Set α}
 theorem diff_subset' : s \ t ⊆ s := by
   rw [Set.subset_def]; intro x h; rw [Set.mem_diff] at h; exact h.1
 
+theorem insert_subset_insert' {a : α} (h : s ⊆ t) : insert a s ⊆ insert a t := by
+  simp only [subset_def, mem_insert_iff, forall_eq_or_imp, true_or, true_and]
+  intro x h'; right; exact Set.mem_of_mem_of_subset h' h
+
 theorem insert_subset_iff' {a : α} : insert a s ⊆ t ↔ a ∈ t ∧ s ⊆ t := by
   simp only [subset_def, mem_insert_iff, forall_eq_or_imp]
 
@@ -64,6 +68,17 @@ theorem insert_comm' (a b : α) (s : Set α) : insert a (insert b s) = insert b 
 theorem union_insert' {a} : s ∪ insert a t = insert a (s ∪ t) := by
   ext x; simp only [mem_union, mem_insert_iff]; conv =>
     lhs; rw [←or_assoc]
+    conv => lhs; rw [or_comm]
+    rw [or_assoc]
+
+theorem insert_union_distrib' (a : α) (s t : Set α) :
+    insert a (s ∪ t) = insert a s ∪ insert a t := by
+  ext x; simp only [mem_insert_iff, mem_union, or_assoc]
+  conv =>
+    rhs
+    rw [or_comm, or_assoc]
+    conv => rhs; rw [or_comm, ←or_assoc, or_self]
+    rw [←or_assoc]
     conv => lhs; rw [or_comm]
     rw [or_assoc]
 

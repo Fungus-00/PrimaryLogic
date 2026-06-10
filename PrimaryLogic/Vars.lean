@@ -475,7 +475,7 @@ lemma Formula.varMap_vars (φ : Formula L) :
     unfold varMap vars
     rw [Set.image_insert_eq', h]
 
-lemma Formula.varMap_fvar {φ : Formula L} (hf : PartInj p f) (hi : φ.av p) :
+lemma Formula.varMap_fvar {φ : Formula L} (hf : PartInj p f) (hi : φ.vars ⊆ p) :
     (varMap f φ).fvar = φ.fvar.image f := by
   open Set in
   induction φ with
@@ -487,7 +487,7 @@ lemma Formula.varMap_fvar {φ : Formula L} (hf : PartInj p f) (hi : φ.av p) :
   | falsum => dsimp [varMap, fvar]; rw [Set.image_empty']
   | impl x y hx hy =>
     unfold varMap fvar
-    simp only [av, vars, Set.mem_union] at hi
+    simp only [Set.subset_def, vars, Set.mem_union] at hi
     rw [Set.image_union', hx fun i h => hi i (Or.inl h), hy fun i h => hi i (Or.inr h)]
   | fall i ψ h =>
     unfold varMap fvar
@@ -499,14 +499,14 @@ lemma Formula.varMap_fvar {φ : Formula L} (hf : PartInj p f) (hi : φ.av p) :
       apply Set.mem_insert_of_mem
       exact hx
     · intro x hx
-      unfold av at hi
       apply hi
       unfold vars
       apply Set.mem_insert_of_mem
       refine Set.mem_of_subset_of_mem ?_ hx
       apply fvar_subset_vars
     · intro x hx
-      unfold av vars at hi
+      unfold vars at hi
+      rw [Set.subset_def] at hi
       rw [Set.mem_singleton_iff] at hx
       rw [hx]
       exact hi i (Set.mem_insert ..)
@@ -596,24 +596,28 @@ theorem Formula.varMap_subst (hf : PartInj p f) {i : Idx} {t : Term L} {φ : For
       exact h' _ hi.right
 
 structure VarContext (L : Lang LF LP) (p : Idx → Prop) where
-  i : Idx
-  t : Term L
-  φ : Formula L
-  ψ : Formula L
+  i : Idx := 0
+  t : Term L := .var i
+  φ : Formula L := .falsum
+  ψ : Formula L := .falsum
   hi : p i
-  ht : t.av p
-  hx : φ.av p
-  hy : ψ.av p
+  ht : t.vars ⊆ p
+  hx : φ.vars ⊆ p
+  hy : ψ.vars ⊆ p
 
 structure Mor (L : Lang LF LP) where
+  d : Idx
   p : Idx -> Prop
   ι : Idx -> Idx
   τ : Term L -> Term L
   f : Formula L -> Formula L
+  pd : p d
   inj_ι : PartInj p ι
 
 open Formula Set in
 structure MorAx (m : Mor L) (c : VarContext L m.p) : Prop where
+  map_τvars : (m.τ c.t).vars = m.ι '' c.t.vars
+  map_fvars : (m.f c.φ).vars = m.ι '' c.φ.vars
   map_falsum : m.f falsum = falsum
   map_impl : m.f (impl c.φ c.ψ) = impl (m.f c.φ) (m.f c.ψ)
   map_fall : m.f (fall c.i c.φ) = fall (m.ι c.i) (m.f c.φ)
@@ -622,22 +626,27 @@ structure MorAx (m : Mor L) (c : VarContext L m.p) : Prop where
   map_subst (h) :
     m.f (subst c.i c.t c.φ h) = subst (m.ι c.i) (m.τ c.t) (m.f c.φ) (free_for h)
 
-def Formula.varMor {p} {f : Idx → Idx} (hf : PartInj p f) (L : Lang LF LP) : Mor L where
+def Formula.varMor {p d} {f : Idx → Idx} (pd : p d)
+    (hf : PartInj p f) (L : Lang LF LP) : Mor L where
+  d := d
   p := p
   ι := f
   τ := Term.varMap f
   f := Formula.varMap f
+  pd := pd
   inj_ι := hf
 
-def Formula.varMorAx {p f} (hf : PartInj p f) (c : VarContext L p) :
-    MorAx (varMor hf L) c where
+def Formula.varMorAx {p f d} (pd : p d) (hf : PartInj p f) (c : VarContext L p) :
+    MorAx (varMor pd hf L) c where
+  map_τvars := Term.varMap_vars c.t
+  map_fvars := Formula.varMap_vars c.φ
   map_falsum := rfl
   map_impl := rfl
   map_fall := rfl
   free_var h := by
     dsimp [varMor]
     have : ∀ i ∈ c.φ.fvar, p i := fun i h =>
-      c.hx i <| Set.mem_of_subset_of_mem (fvar_subset_vars ..) h
+      Set.mem_of_subset_of_mem c.hx <| Set.mem_of_subset_of_mem (fvar_subset_vars c.φ) h
     rw [varMap_fvar hf c.hx, hf.mem_set_image this c.hi]
     exact h
   free_for h := (varMap_FreeFor hf c.hi c.hx c.ht).mp h
