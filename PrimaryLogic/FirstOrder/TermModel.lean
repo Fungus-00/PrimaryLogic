@@ -58,7 +58,7 @@ theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula
         exact .mp p' (p h)
       · have p1 := (hk.mc.right x).resolve_left h
         rw [maxConSet_iff Δ _ hk.mc] at p1
-        exact Proof.neg_impl _ _ p1
+        exact Proof.neg_impl p1
     · intro h g
       rw [maxConSet_iff Δ x hk.mc] at g
       exact .mp h g
@@ -102,7 +102,7 @@ theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula
       rcases hg with h' | h'
       · rw [h']
         exact p
-      · rw [FOL.from_FOL_axiom] at h'
+      · rw [FOL.mem_theory_iff] at h'
         obtain ⟨a, ha⟩ := h'
         replace h' := soundness_axiom (TermModel Δ) (replace Term.var i t) a
         rwa [ha] at h'

@@ -53,7 +53,7 @@ lemma exfalso (x : Formula L) : Γ ⊢ ⊥ → x :=
   have p4 := p2.mp p3
   (deduction Γ ⊥ x).mp p4
 
-lemma neg_impl (x y : Formula L) : (Γ ⊢ ¬x) -> (Γ ⊢ x → y) := fun h =>
+lemma neg_impl {x y : Formula L} : (Γ ⊢ ¬x) -> (Γ ⊢ x → y) := fun h =>
   have p1 := AX Γ <| .h2 x ⊥ y
   have p2 := exfalso (Γ := Γ) y
   have p3 := AX Γ <| .h1 (⊥ → y) x
@@ -82,6 +82,15 @@ lemma contrapositive (x y : Formula L) : Γ ⊢ (¬x → ¬y) → (y → x) :=
   have p8 := p7.mp p6
   have p9 := (deduction (Γ.insert ((x → ⊥) → (y → ⊥))) y x).mp p8
   (deduction Γ ((x → ⊥) → (y → ⊥)) (y → x)).mp p9
+
+lemma neg_of_impl (x y : Formula L) : Γ ⊢ ¬(x → y) → x :=
+  have p1 := AS (φ := ¬x) (Set.mem_insert _ Γ)
+  have p2 := neg_impl (y := y) p1
+  have p3 := intro_double_neg (Γ := insert (¬x) Γ) (x → y)
+  have p4 := mp p3 p2
+  have p5 := (deduction ..).mp p4
+  have p6 := contrapositive (Γ := Γ) x (¬(x → y))
+  mp p6 p5
 
 lemma raa (x : Formula L) : (Γ ⊢ x) <-> Inconsistent (Γ.insert (¬x) ∪ FOLTheory) := by
   unfold Inconsistent

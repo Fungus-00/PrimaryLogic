@@ -474,11 +474,11 @@ private def extractSub (p : α → Prop) [DecidablePred p] : List α → List (S
   | [] => []
   | a :: l => if h : p a then ⟨a, h⟩ :: extractSub p l else extractSub p l
 
-def _root_.List.pass (p : α → Prop) [DecidablePred p] (l : List α) : List (Subtype p) :=
+private def pass (p : α → Prop) [DecidablePred p] (l : List α) : List (Subtype p) :=
   (extractSub p l).dedup
 
 open List
-lemma pass_valid {p : α → Prop} [DecidablePred p] {l : List α} {a : α}
+private lemma pass_valid {p : α → Prop} [DecidablePred p] {l : List α} {a : α}
     (hl : a ∈ l) (hp : p a) : ⟨a, hp⟩ ∈ pass p l := by
   simp only [pass, List.mem_dedup']
   induction l with
@@ -495,7 +495,7 @@ lemma pass_valid {p : α → Prop} [DecidablePred p] {l : List α} {a : α}
       · subst h2; exfalso; exact h1 hp
       · exact h h3
 
-lemma pass_uni (p : α → Prop) [DecidablePred p] {l : List α} :
+private lemma pass_uni (p : α → Prop) [DecidablePred p] {l : List α} :
     let s := pass p l; ∀ {m n : Nat}, ∀ hm : m < s.length, ∀ hn : n < s.length,
     s[m]'hm = s[n]'hn → m = n := fun _ _ h =>
   Fin.val_inj.mpr <| (List.Nodup.get_inj_iff <| List.nodup_dedup <| extractSub p l).mp h
