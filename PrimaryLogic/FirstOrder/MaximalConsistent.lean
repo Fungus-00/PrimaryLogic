@@ -4,6 +4,54 @@ import PrimaryLogic.FirstOrder.Theorem
 namespace PrimaryLogic
 variable {LF LP : Type} {L : Lang LF LP} (Γ : Set (Formula L))
 
+section expand
+variable {α : Type*} (f : Set α → Nat → Set α) (s : Set α)
+
+def expand : Nat -> Set α
+  | .zero => s
+  | .succ n => f (expand n) n
+
+theorem expand_monotone (hf : ∀ n, ∀ Δ, Δ ⊆ f Δ n) (m n : Nat) :
+    m ≤ n -> expand f s m ⊆ expand f s n := by
+  intro hm
+  induction n with
+  | zero => rw [Nat.le_zero.mp hm]
+  | succ n h =>
+    by_cases hn : m = n + 1
+    · rw [hn]
+    · have : m ≤ n := Nat.le_of_lt_succ (Nat.lt_of_le_of_ne hm hn)
+      apply Set.Subset.trans (h this)
+      simp only [expand]
+      apply hf
+
+def completeExpand := ⋃ n : Nat, expand f s n
+
+variable {f : Set (Formula L) → Nat → Set (Formula L)} {Γ : Set (Formula L)}
+theorem maximalSet_compact (hf : ∀ n, ∀ Δ, Δ ⊆ f Δ n) (φ : Formula L) :
+    (completeExpand f Γ ⊢ φ) -> ∃ n : Nat, expand f Γ n ⊢ φ := by
+  intro p
+  induction p with
+  | asp ψ hg =>
+    unfold completeExpand at hg
+    rw [Set.mem_union, Set.mem_iUnion] at hg
+    rcases hg with ⟨n, h⟩ | h
+    · use n
+      apply Proof.asp ψ
+      rw [Set.mem_union]
+      left; exact h
+    · use 0
+      exact FOL.axiom_proof h
+  | @mp ψ χ p q hp hq =>
+    obtain ⟨m, hm⟩ := hp
+    obtain ⟨n, hn⟩ := hq
+    use max m n
+    have := expand_monotone f Γ hf m (max m n) (Nat.le_max_left m n)
+    have h1 := FOL.mono this hm
+    have := expand_monotone f Γ hf n (max m n) (Nat.le_max_right m n)
+    have h2 := FOL.mono this hn
+    exact Proof.mp h1 h2
+end expand
+
 section maximal_con
 abbrev InCon : Prop := Inconsistent (Γ ∪ FOLTheory)
 abbrev Con : Prop := Consistent (Γ ∪ FOLTheory)
@@ -35,9 +83,8 @@ def tryAdd (n : Nat) : Set (Formula L) :=
   | some φ => if InCon (Γ.insert φ)
     then Γ.insert (¬φ) else Γ.insert φ
 
-def expand (Γ : Set (Formula L)) : Nat -> Set (Formula L)
-  | .zero => Γ
-  | .succ n => tryAdd (expand Γ n) n
+def expandM (Γ : Set (Formula L)) : Nat -> Set (Formula L) :=
+  expand (fun x => tryAdd (L := L) x) Γ
 
 lemma tryAdd_con_valid (n : Nat) : Con Γ -> Con (tryAdd Γ n) := by
   intro h
@@ -56,75 +103,42 @@ lemma tryAdd_con_valid (n : Nat) : Con Γ -> Con (tryAdd Γ n) := by
       contradiction
     · exact h2
 
-lemma expandAdd_con_valid (n : Nat) : Con Γ -> Con (expand Γ n) := by
+lemma expandAdd_con_valid (n : Nat) : Con Γ -> Con (expandM Γ n) := by
   intro h
   induction n with
-  | zero => unfold expand; exact h
-  | succ n hn => unfold expand; exact tryAdd_con_valid _ n hn
+  | zero => unfold expandM; exact h
+  | succ n hn => unfold expandM; exact tryAdd_con_valid _ n hn
 
-lemma expandAdd_monotone (m n : Nat) : m ≤ n -> expand Γ m ⊆ expand Γ n := by
-  intro hm
-  induction n with
-  | zero => rw [Nat.le_zero.mp hm]
-  | succ n h =>
-    by_cases hn : m = n + 1
-    · rw [hn]
-    · have : m ≤ n := Nat.le_of_lt_succ (Nat.lt_of_le_of_ne hm hn)
-      apply Set.Subset.trans (h this)
-      simp only [expand]
-      have tryAdd_monotone (Δ : Set (Formula L)): Δ ⊆ tryAdd Δ n := by
-        cases h' : Encodable.decode (α := Formula L) n with
-        | none => simp only [tryAdd, h', Set.Subset.refl]
-        | some φ => simp only [tryAdd, h']; split_ifs <;> exact Set.subset_insert _ Δ;
-      exact tryAdd_monotone _
+lemma tryAdd_monotone (n : Nat) (Δ : Set (Formula L)) : Δ ⊆ tryAdd Δ n := by
+  cases h' : Encodable.decode (α := Formula L) n with
+  | none => simp only [tryAdd, h', Set.Subset.refl]
+  | some φ => simp only [tryAdd, h']; split_ifs <;> exact Set.subset_insert _ Δ
 
-private abbrev maxExpand := ⋃ n : Nat, expand Γ n
-
-lemma maximalSet_compact (φ : Formula L) : (maxExpand Γ ⊢ φ) -> ∃ n : Nat, expand Γ n ⊢ φ := by
-  intro p
-  induction p with
-  | asp ψ hg =>
-    rw [Set.mem_union, Set.mem_iUnion] at hg
-    rcases hg with ⟨n, h⟩ | h
-    · use n
-      apply Proof.asp ψ
-      rw [Set.mem_union]
-      left; exact h
-    · use 0
-      exact FOL.axiom_proof h
-  | @mp ψ χ p q hp hq =>
-    obtain ⟨m, hm⟩ := hp
-    obtain ⟨n, hn⟩ := hq
-    use max m n
-    have := expandAdd_monotone Γ m (max m n) (Nat.le_max_left m n)
-    have h1 := FOL.mono this hm
-    have := expandAdd_monotone Γ n (max m n) (Nat.le_max_right m n)
-    have h2 := FOL.mono this hn
-    exact Proof.mp h1 h2
+private abbrev maxExpand := completeExpand (tryAdd (L := L) ·)
 
 theorem Lindenbaum : Con Γ -> MaximalConsistent (maxExpand Γ) := by
   intro h
   unfold MaximalConsistent
-  constructor
+  split_ands
   · by_contra
     unfold Inconsistent at this
-    obtain ⟨n, p⟩ := maximalSet_compact Γ ⊥ this
+    obtain ⟨n, p⟩ := maximalSet_compact tryAdd_monotone ⊥ this
     have := expandAdd_con_valid Γ n h
     contradiction
   · intro φ
     rcases lem (φ ∈ maxExpand Γ) with h1 | h1
     · left; exact h1
-    · right
+    · right; unfold maxExpand completeExpand at h1
       rw [Set.mem_iUnion, not_exists] at h1
       let n := Encodable.encode (α := Formula L) φ
       refine Set.mem_iUnion.mpr ⟨n.succ, ?_⟩
       have h2 : Encodable.decode n = some φ := Encodable.encodek φ
       simp only [expand, tryAdd, h2]
-      by_cases h4 : InCon (Set.insert φ (expand Γ n))
+      by_cases h4 : InCon (Set.insert φ (expand (fun x ↦ tryAdd x) Γ n))
       · simp only [h4]; apply Set.mem_insert
       · have h3 := h1 n.succ
         simp only [expand, tryAdd, h2, h4] at h3
-        have := Set.mem_insert φ (expand Γ n)
+        have := Set.mem_insert φ (expandM Γ n)
         contradiction
 end maximal_con
 
@@ -180,4 +194,87 @@ def ProofTree.map {p} [DecidablePred p] [fr : Freshable (Subtype p)] {f : Idx �
       fun _ h => List.mem_cons_of_mem d (compress_varList_eq t ▸ h)
   monotone (Set.image_mono' <| assumptions_subset t) r
 
+def news {α : Type*} [fr : Freshable α] (ρ : Nat → Option (List α)) : Nat → List α
+  | .zero => []
+  | .succ n => match ρ n with
+    | none => news ρ n
+    | some s => let l := s ++ news ρ n; fr.fresh l :: l
+
+section Henkin
+variable (p : Idx → Prop) [DecidablePred p] [fr : Freshable (Subtype p)]
+
+def newVar (n : Nat) (ρ : Nat → (Option <| List <| Subtype p)) : Subtype p :=
+  fr.fresh <| (ρ n).getD [] ++ news ρ n
+
+def newTerm (f : Nat → Option (Formula L)) (n : Nat) : Term L :=
+  .var <| Subtype.val <| newVar p n fun k => List.pass p <$> Formula.varList <$> f k
+
+lemma newTerm_FreeFor (f : Nat → Option (Formula L)) (n : Nat) (i : Idx) :
+    match f n with | some s => Formula.FreeFor i (newTerm p f n) s | none => True :=
+  match hn : f n with
+  | none => True.intro
+  | some s => Formula.var_var_FreeFor i _ _ fun h' => by
+    have h := List.pass_valid ((Formula.vars_eq_list ..).mp h') (Subtype.prop _)
+    rw [Subtype.coe_eta] at h
+    unfold newVar at h
+    simp only [hn, Option.map_eq_map, Option.map_some, Option.getD_some, Option.map_map] at h
+    exact fr.fresh_is_new _ <| List.mem_append_left _ <| h
+
+def Formula.henkin (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor i t φ) : Formula L :=
+  (¬∀i# φ) → ¬(subst i t φ h)
+
+instance [Encodable LP] [Encodable LF] : Encodable (Idx × Formula L) := inferInstance
+
+variable [Encodable LP] [Encodable LF]
+def Formula.henkinTerm (i : Idx) (φ : Formula L) : Term L :=
+  newTerm p (Prod.snd <$> Encodable.decode (α := Idx × Formula L) ·) (Encodable.encode (i, φ))
+
+lemma Formula.henkinTerm_FreeFor (i : Idx) (φ : Formula L) :
+    Formula.FreeFor i (henkinTerm p i φ) φ := by
+  have h : Prod.snd <$> Encodable.decode (α := Idx × Formula L) ((Encodable.encode (i, φ)))
+      = φ := by simp only [Encodable.encode_prod_val',
+    Encodable.encode_nat, Encodable.decode_prod_val', Nat.unpair_pair', Encodable.decode_nat,
+    Encodable.encodek, Option.map_some, Option.bind_some, Option.map_eq_map]
+  have h2 := h ▸ newTerm_FreeFor p (Prod.snd <$> Encodable.decode (α := Idx × Formula L) ·)
+    (Encodable.encode (i, φ)) i
+  unfold henkinTerm
+  dsimp only [Option.map_eq_map, Encodable.encode_prod_val, Encodable.encode_nat] at h2
+  exact h2
+
+def Formula.henkinfy (i : Idx) (φ : Formula L) : Formula L :=
+  henkin i (henkinTerm p i φ) φ (henkinTerm_FreeFor p i φ)
+
+def henkinAdd (Γ : Set (Formula L)) (n : Nat) : Set (Formula L) :=
+  match Encodable.decode n (α := Idx × Formula L) with
+  | .none => Γ
+  | .some ⟨i, φ⟩ => insert (Formula.henkinfy p i φ) Γ
+
+lemma henkinAdd_monotone (n : Nat) (Δ : Set (Formula L)) : Δ ⊆ henkinAdd p Δ n := by
+  cases h' : Encodable.decode (α := Idx × Formula L) n with
+  | none => simp only [henkinAdd, h', Set.Subset.refl]
+  | some φ => simp only [henkinAdd, h']; exact Set.subset_insert _ Δ
+
+private abbrev henkinExpand := completeExpand (henkinAdd p (L := L) ·)
+
+theorem Henkinbaum : Con Γ -> Con (henkinExpand p Γ) := by
+  intro h'; by_contra h
+  unfold henkinExpand completeExpand Inconsistent at h
+  replace h := maximalSet_compact (henkinAdd_monotone p) ⊥ h
+  have ⟨m, h1, h2⟩ := @Nat.findX _ sorry h
+  unfold expand at h1
+  match hm : m with
+  | .zero => exact h' h1
+  | .succ n =>
+    match hn : Encodable.decode n (α := Idx × Formula L) with
+    | .none =>
+      simp only [henkinAdd, hn] at h1
+      exact h2 n (Nat.lt_succ_self n) h1
+    | .some ⟨i, φ⟩ =>
+      simp only [henkinAdd, hn, insert, Proof.deduction] at h1
+      unfold Formula.henkinfy Formula.henkin at h1
+      have h3 := Proof.mp (Proof.neg_of_impl _ _) h1
+      apply h2 n (Nat.lt_succ_self n)
+      apply Proof.mp h3
+      sorry
+end Henkin
 end PrimaryLogic

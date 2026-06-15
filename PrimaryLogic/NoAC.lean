@@ -186,10 +186,92 @@ theorem add_eq_left' {a b : Nat} : a + b = a ↔ b = 0 := by
       exact ha (Nat.add_right_cancel h)
   · intro h; rw [h]; apply Nat.add_zero
 
+protected theorem right_eq_add' {a b : Nat} : b = a + b ↔ a = 0 := by
+  induction b with
+  | zero => rw [add_zero]; constructor <;> exact Eq.symm
+  | succ n h => rw [←Nat.add_assoc, Nat.add_right_cancel_iff, h]
+
+theorem succ_div_of_dvd' {a b : Nat} (h : b ∣ a + 1) :
+    (a + 1) / b = a / b + 1 := by
+  replace h := mod_eq_zero_of_dvd h
+  cases b with
+  | zero => simp at h
+  | succ b =>
+    by_cases h' : b ≤ a
+    · rw [Nat.div_eq]
+      simp only [zero_lt_succ, Nat.add_le_add_iff_right, h', and_self,
+        ↓reduceIte, Nat.add_right_cancel_iff]
+      conv => lhs; lhs; rw [Nat.add_sub_add_right]
+      obtain ⟨_|k, h⟩ := Nat.dvd_of_mod_eq_zero h
+      · simp at h
+      · simp only [Nat.mul_add, Nat.add_mul, Nat.one_mul, Nat.mul_one, ← Nat.add_assoc,
+          Nat.add_right_cancel_iff] at h
+        subst h
+        rw [Nat.add_sub_cancel, ← Nat.add_one_mul, mul_div_right _ (zero_lt_succ _), Nat.add_comm,
+          Nat.add_mul_div_left _ _ (zero_lt_succ _), Nat.right_eq_add', div_eq_of_lt le.refl]
+    · simp only [Nat.not_le] at h'
+      replace h' : a + 1 < b + 1 := Nat.add_lt_add_right h' 1
+      rw [Nat.mod_eq_of_lt h'] at h
+      simp at h
+
+theorem le_iff_lt_add_one' {x y : Nat} : x ≤ y ↔ x < y + 1 := by
+  induction x with
+  | zero =>
+    constructor
+    · intro; omega
+    · intro; exact Nat.zero_le y
+  | succ n h' =>
+    have hy : y < y + 1 := by simp only [lt_add_iff_pos_right, zero_lt_one]
+    constructor
+    · intro h; exact Nat.lt_of_le_of_lt h hy
+    · intro h; omega
+
+theorem div_le_iff_le_mul' {k x y : Nat} (h : 0 < k) : x / k ≤ y ↔ x ≤ y * k + k - 1 := by
+  rw [le_iff_lt_add_one', Nat.div_lt_iff_lt_mul h, Nat.add_one_mul]
+  conv => rhs; rw [le_iff_lt_add_one', Nat.sub_one_add_one (by omega)]
+
+protected theorem div_eq_iff' {k x y : Nat} (h : 0 < k) :
+    x / k = y ↔ y * k ≤ x ∧ x ≤ y * k + k - 1 := by
+  rw [Nat.eq_iff_le_and_ge, and_comm, le_div_iff_mul_le h, Nat.div_le_iff_le_mul' h]
+
+theorem succ_div_of_not_dvd' {a b : Nat} (h : ¬ b ∣ a + 1) :
+    (a + 1) / b = a / b := by
+  replace h := mt dvd_of_mod_eq_zero h
+  cases b with
+  | zero => simp
+  | succ b =>
+    rw [eq_comm, Nat.div_eq_iff' (by omega)]
+    constructor
+    · rw [Nat.div_mul_self_eq_mod_sub_self]
+      omega
+    · rw [Nat.div_mul_self_eq_mod_sub_self]
+      have : (a + 1) % (b + 1) < b + 1 := Nat.mod_lt _ (by omega)
+      omega
+
+protected theorem succ_div' {a b : Nat} : (a + 1) / b = a / b + if b ∣ a + 1 then 1 else 0 := by
+  split <;> rename_i h
+  · simp only [succ_div_of_dvd' h]
+  · simp only [succ_div_of_not_dvd' h, add_zero]
+
+protected theorem not_two_dvd_bit1' (n : ℕ) : ¬2 ∣ 2 * n + 1 := by
+  omega
+
+lemma div2_succ' (n : ℕ) : div2 (n + 1) = cond (bodd n) (succ (div2 n)) (div2 n) := by
+  cases n using bitCasesOn with | bit b n => cases b with
+  | true => simp only [bit_val, Bool.toNat_true, Nat.add_assoc, div2_val, Nat.succ_div',
+    ne_eq, OfNat.ofNat_ne_zero, not_false_eq_true, mul_div_cancel_left₀, Nat.not_two_dvd_bit1',
+    ↓reduceIte, add_zero, Nat.dvd_add_self_right, dvd_mul_right, bodd_succ, bodd_mul, bodd_zero,
+    Bool.not_false, Bool.not_true, Bool.false_and, succ_eq_add_one, cond_true]
+  | false => simp only [bit_val, Bool.toNat_false, add_zero, div2_val, Nat.succ_div', ne_eq,
+    OfNat.ofNat_ne_zero, not_false_eq_true, mul_div_cancel_left₀,
+    Nat.dvd_add_right (Nat.dvd_mul_right _ _), dvd_one, OfNat.ofNat_ne_one,
+    ↓reduceIte, bodd_mul, bodd_succ, bodd_zero, Bool.not_false, Bool.not_true,
+    Bool.false_and, succ_eq_add_one, cond_false]
+
 lemma bodd_add_div2' : ∀ n, (bodd n).toNat + 2 * div2 n = n
   | 0 => rfl
   | succ n => by
-    simp only [bodd_succ, div2_succ, Nat.mul_comm]
+    simp only [bodd_succ, div2_succ', Nat.mul_comm]
     refine Eq.trans ?_ (congr_arg succ (bodd_add_div2' n))
     cases bodd n
     · simp only [Bool.not_false, Bool.toNat_true, succ_eq_add_one,
@@ -198,11 +280,6 @@ lemma bodd_add_div2' : ∀ n, (bodd n).toNat + 2 * div2 n = n
     · simp only [Bool.not_true, Bool.toNat_false, succ_eq_add_one,
         cond_true, zero_add, Bool.toNat_true]
       omega
-
-lemma div2_val' (n) : div2 n = n / 2 := by
-  refine Nat.eq_of_mul_eq_mul_left (by decide)
-    (Nat.add_left_cancel (Eq.trans ?_ (Nat.mod_add_div n 2).symm))
-  rw [mod_two_of_bodd, bodd_add_div2']
 
 private def IsSqrt (n q : ℕ) : Prop :=
   q * q ≤ n ∧ n < (q + 1) * (q + 1)
@@ -345,11 +422,18 @@ theorem unpair_right_le' (n : ℕ) : (unpair n).2 ≤ n := by
 end Nat
 
 namespace Encodable
-variable {α : Type u} [Encodable α]
+variable {α : Type u} {β : Type v} [Encodable α] [Encodable β]
 
-instance Sum.encodable' {β} [Encodable β] : Encodable (α ⊕ β) :=
-  ⟨encodeSum, decodeSum, fun s => by cases s <;>
-  simp [encodeSum, Nat.div2_val', decodeSum, encodek]⟩
+instance Sum.encodable' [Encodable β] : Encodable (α ⊕ β) :=
+  ⟨encodeSum, decodeSum, fun s => by
+    cases s with
+  | inl x => simp only [decodeSum, encodeSum, Nat.bodd_mul, Nat.bodd_succ, Nat.bodd_zero,
+    Bool.not_false, Bool.not_true, Bool.false_and, Nat.div2_val, ne_eq, OfNat.ofNat_ne_zero,
+    not_false_eq_true, mul_div_cancel_left₀, encodek, Option.map_some]
+  | inr y => simp only [decodeSum, encodeSum, Nat.bodd_succ, Nat.bodd_mul, Nat.bodd_zero,
+    Bool.not_false, Bool.not_true, Bool.false_and, Nat.div2_succ', Nat.div2_val, ne_eq,
+    OfNat.ofNat_ne_zero, not_false_eq_true, mul_div_cancel_left₀, Nat.succ_eq_add_one,
+    cond_false, encodek, Option.map_some]⟩
 
 open Nat in
 def decodeList' : ℕ → Option (List α)
@@ -371,6 +455,19 @@ instance Sigma.encodable' {γ} [(a : α) → Encodable (γ a)] : Encodable (Sigm
   ⟨encodeSigma, decodeSigma, fun ⟨a, b⟩ => by
     simp only [decodeSigma, encodeSigma, Nat.unpair_pair',
       encodek, Option.bind_some, Option.map_some]⟩
+
+instance Prod.encodable' : Encodable (α × β) :=
+  ofEquiv _ (Equiv.sigmaEquivProd α β).symm
+
+theorem encode_prod_val' (a b) : @encode (α × β) _ (a, b) = Nat.pair (encode a) (encode b) :=
+  rfl
+
+theorem decode_prod_val' (n : ℕ) :
+    (@decode (α × β) _ n : Option (α × β))
+      = (decode n.unpair.1).bind fun a => (decode n.unpair.2).map <| Prod.mk a := by
+  simp only [decode_ofEquiv, Equiv.symm_symm, decode_sigma_val]
+  cases (decode n.unpair.1 : Option α) <;> cases (decode n.unpair.2 : Option β)
+  <;> rfl
 
 instance List.Vector.encodable' [Encodable α] {n} : Encodable (List.Vector α n) :=
   inferInstanceAs <| Encodable (Subtype _)

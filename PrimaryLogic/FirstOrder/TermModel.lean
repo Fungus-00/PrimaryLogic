@@ -18,9 +18,6 @@ theorem Term.interpret_termModel (t : Term L) : interpret (TermModel Δ) .var t 
     conv => lhs; arg 0; dsimp only [TermModel]
     congr; funext k; exact h k
 
-def Formula.henkin (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor i t φ) : Formula L :=
-  (¬∀i# φ) → ¬(subst i t φ h)
-
 class Henkin (Δ : Set (Formula L)) (θ : Idx -> Formula L -> Term L) : Prop where
   mc : MaximalConsistent Δ
   pt : ∀ i : Idx, ∀ φ : Formula L, Formula.FreeFor i (θ i φ) φ
