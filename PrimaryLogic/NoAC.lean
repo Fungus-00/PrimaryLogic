@@ -71,6 +71,9 @@ theorem union_insert' {a} : s ∪ insert a t = insert a (s ∪ t) := by
     conv => lhs; rw [or_comm]
     rw [or_assoc]
 
+theorem insert_union' : insert a s ∪ t = insert a (s ∪ t) := by
+  ext x; simp only [Set.mem_insert_iff, Set.mem_union, or_assoc]
+
 theorem insert_union_distrib' (a : α) (s t : Set α) :
     insert a (s ∪ t) = insert a s ∪ insert a t := by
   ext x; simp only [mem_insert_iff, mem_union, or_assoc]

@@ -212,7 +212,7 @@ lemma ffresh_notMem {α : Type*} [fr : Freshable α] (ρ : Nat → Option (List 
     · cases ρ n with
       | none => exact hn h hv
       | some l =>
-        dsimp
+        dsimp only [Lean.Elab.WF.paramLet]
         apply List.subset_cons_of_subset
         apply List.subset_append_of_subset_right
         exact hn h hv
@@ -220,7 +220,7 @@ lemma ffresh_notMem {α : Type*} [fr : Freshable α] (ρ : Nat → Option (List 
       cases hu : ρ m with
       | none => exfalso; rw [hv] at hu; simp at hu
       | some l =>
-        dsimp
+        dsimp only [Lean.Elab.WF.paramLet]
         rw [hv, Option.some_inj] at hu
         rw [hu]
         apply List.subset_cons_of_subset
@@ -228,142 +228,199 @@ lemma ffresh_notMem {α : Type*} [fr : Freshable α] (ρ : Nat → Option (List 
         apply List.Subset.refl
 
 section Henkin
-variable (p : Idx → Prop) [DecidablePred p] [fr : Freshable (Subtype p)]
-
-def newVar (n : Nat) (ρ : Nat → (Option <| List <| Subtype p)) : Subtype p :=
-  fr.fresh <| (ρ n).getD [] ++ ffresh ρ n
-
-def newTerm (f : Nat → Option (Formula L)) (n : Nat) : Term L :=
-  .var <| Subtype.val <| newVar p n fun k => List.pass p <$> Formula.varList <$> f k
-
-lemma newTerm_vars (f : Nat → Option (Formula L)) (n : Nat) :
-    match f n with | some φ => (newTerm p f n).vars ∩ φ.vars = ∅ | none => True :=
-  match hn : f n with
-  | none => True.intro
-  | some φ => by
-    dsimp [newTerm, Term.vars]
-    rw [Set.singleton_inter_eq_empty]
-    intro h'
-    have h := List.pass_valid ((Formula.vars_eq_list ..).mp h') (Subtype.prop _)
-    rw [Subtype.coe_eta] at h
-    unfold newVar at h
-    simp only [hn, Option.map_some, Option.getD_some, Option.map_map] at h
-    exact fr.fresh_is_new _ <| List.mem_append_left _ <| h
-
-lemma newTerm_gvars (f : Nat → Option (Formula L)) {m n : Nat} (h0 : m < n) :
-    match f n, f m with | some _, some ψ => (newTerm p f n).vars ∩ ψ.vars = ∅ | _, _ => True :=
-  match hn : f n, hm : f m with
-  | some φ, some ψ => by
-    dsimp [newTerm, Term.vars, newVar]
-    rw [Set.singleton_inter_eq_empty, hn]
-    intro h'
-    rw [Formula.vars_eq_list, Option.map_some, Option.map_some, Option.getD_some] at h'
-    replace h' := List.pass_valid h' (Subtype.prop _)
-    rw [Subtype.coe_eta] at h'
-    have h := ffresh_notMem (fun k ↦ Option.map (List.pass p) (Option.map Formula.varList (f k))) h0
-    simp only [hm, Option.map_some] at h
-    replace h := List.subset_append_of_subset_right (List.pass p φ.varList) h
-    rw [List.subset_def] at h
-    exact Freshable.fresh_is_new _ (h h')
-  | none, some _ | some _, none | none, none => True.intro
-
-def Formula.henkin (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor i t φ) : Formula L :=
-  (¬∀i# φ) → ¬(subst i t φ h)
-
+variable (p : Idx → Prop) [fr : Freshable (Subtype p)]
 instance [Encodable LP] [Encodable LF] : Encodable (Idx × Formula L) := inferInstance
 
+def newVar (ρ : Nat → (Option <| List <| Subtype p)) (n : Nat) (h : (ρ n).isSome) : Subtype p :=
+  fr.fresh <| (ρ n).get h ++ ffresh ρ n
+
+lemma newVar_mem_ffresh {ρ : Nat → (Option <| List <| Subtype p)} {m n : Nat} (h0 : m < n)
+    (hm : (ρ m).isSome) : newVar p ρ m hm ∈ ffresh ρ n := by
+  induction n with
+  | zero => exfalso; exact Nat.not_lt_zero m h0
+  | succ n hn =>
+    unfold ffresh
+    rw [Nat.lt_add_one_iff, Nat.le_iff_lt_or_eq] at h0
+    cases hv : ρ n with
+    | none =>
+      dsimp
+      rcases h0 with h0 | h0
+      · exact hn h0
+      · exfalso; rwa [h0, hv, Option.isSome_none, Bool.false_eq_true] at hm
+    | some t =>
+      dsimp
+      rcases h0 with h0 | h0
+      · apply List.mem_cons_of_mem
+        apply List.mem_append_right
+        exact hn h0
+      · subst h0; unfold newVar; rw [List.mem_cons]
+        left; congr; simp only [hv, Option.get_some]
+
+lemma newVar_uni {ρ : Nat → (Option <| List <| Subtype p)} {m n : Nat} (h0 : m < n)
+    (hm : (ρ m).isSome) (hn : (ρ n).isSome) : newVar p ρ m hm ≠ newVar p ρ n hn := fun h => by
+  have h1 := newVar_mem_ffresh p h0 hm
+  rw [h] at h1
+  unfold newVar at h1
+  apply Freshable.fresh_is_new ((ρ n).get hn ++ ffresh ρ n)
+  exact List.mem_append_right _ h1
+
+variable [DecidablePred p]
+
+def varGet (f : Nat → Option (Formula L)) (n : Nat) : Option <| List <| Subtype p :=
+  Option.map (List.pass p <| Formula.varList <| ·) (f n)
+
+def newTerm (f : Nat → Option (Formula L)) (n : Nat) (h : (f n).isSome) : Term L :=
+  .var <| Subtype.val <| newVar p (varGet p f) n <| by
+    dsimp [varGet]; rw [Option.isSome_map]; exact h
+
+lemma newTerm_vars (f : Nat → Option (Formula L)) (n : Nat) (h : (f n).isSome) :
+    (newTerm p f n h).vars ∩ ((f n).get h).vars = ∅ := by
+  dsimp [newTerm, Term.vars]
+  rw [Set.singleton_inter_eq_empty]
+  intro h'
+  have hl := List.pass_valid ((Formula.vars_eq_list ..).mp h') (Subtype.prop _)
+  rw [Subtype.coe_eta] at hl
+  simp only [newVar, varGet, Option.get_map] at hl
+  exact fr.fresh_is_new _ <| List.mem_append_left _ <| hl
+
+lemma newTerm_gvars (f : Nat → Option (Formula L)) {m n : Nat} (h0 : m < n)
+    (hm : (f m).isSome) (hn : (f n).isSome) :
+    (newTerm p f n hn).vars ∩ ((f m).get hm).vars = ∅ := by
+  dsimp [newTerm, Term.vars, newVar]
+  rw [Set.singleton_inter_eq_empty]
+  intro h'
+  rw [Formula.vars_eq_list] at h'
+  replace h' := List.pass_valid h' (Subtype.prop _)
+  rw [Subtype.coe_eta] at h'
+  have h := ffresh_notMem (varGet p f) h0
+  cases hm' : f m with
+  | none => simp only [hm', Option.isSome_none, Bool.false_eq_true] at hm
+  | some a => cases hn' : f n with
+    | none => simp only [hn', Option.isSome_none, Bool.false_eq_true] at hn
+    | some b =>
+      simp only [varGet, hm', hn', Option.map_some, Option.get_some] at h'
+      simp only [varGet, hm', Option.map_some] at h
+      replace h := List.subset_append_of_subset_right (List.pass p b.varList) h
+      rw [List.subset_def] at h
+      exact Freshable.fresh_is_new _ (h h')
+
+lemma newTerm_disjoint (f : Nat → Option (Formula L)) {m n : Nat} (h0 : m < n)
+    (hm : (f m).isSome) (hn : (f n).isSome) :
+    (newTerm p f m hm).vars ∩ (newTerm p f n hn).vars = ∅ := by
+  dsimp [newTerm, Term.vars]
+  rw [Set.singleton_inter_eq_empty, Set.mem_singleton_iff, ←Subtype.ext_iff]
+  apply newVar_uni p h0
+
+private abbrev dc {LF LP : Type} [Encodable LP] [Encodable LF] (L : Lang LF LP) :=
+  Encodable.decode (α := Idx × Formula L)
+
 variable [Encodable LP] [Encodable LF]
-def Formula.henkinTerm (i : Idx) (φ : Formula L) : Term L :=
-  newTerm p (Prod.snd <$> Encodable.decode (α := Idx × Formula L) ·) (Encodable.encode (i, φ))
 
-lemma Formula.henkinTerm_vars (i : Idx) (φ : Formula L) :
-    (henkinTerm p i φ).vars ∩ φ.vars = ∅ := by
-  have h : Prod.snd <$> Encodable.decode (α := Idx × Formula L) ((Encodable.encode (i, φ)))
-      = φ := by simp only [Encodable.encode_prod_val', Encodable.encode_nat,
-    Encodable.decode_prod_val', Nat.unpair_pair', Encodable.decode_nat,
-    Encodable.encodek, Option.map_some, Option.bind_some, Option.map_eq_map]
-  have h2 := h ▸ newTerm_vars p (Prod.snd <$> Encodable.decode (α := Idx × Formula L) ·)
-    (Encodable.encode (i, φ))
+def forGet (n : Nat) : Option (Formula L) := Option.map (fun x => Formula.fall (x.1) x.2) (dc L n)
+
+def Formula.henkinTerm (n : Nat) (h : (dc L n).isSome) : Term L :=
+  newTerm p forGet n <| by simp only [forGet, Option.isSome_map]; exact h
+
+lemma Formula.henkinTerm_vars (n : Nat) (h : (dc L n).isSome) :
+    (henkinTerm p n h).vars ∩ ((dc L n).get h).2.vars = ∅ := by
   unfold henkinTerm
-  dsimp only [Option.map_eq_map, Encodable.encode_prod_val, Encodable.encode_nat] at h2
-  exact h2
+  have hb := newTerm_vars p forGet n <| by
+    simp only [forGet, Option.isSome_map]; exact h
+  conv at hb => lhs; rhs; simp only [forGet, Option.get_map, Formula.vars]
+  rw [Set.insert_eq, Set.inter_union_distrib_left, Set.union_eq_empty] at hb
+  exact hb.2
 
-def Formula.henkinfy (i : Idx) (φ : Formula L) : Formula L :=
-  henkin i (henkinTerm p i φ) φ <| Formula.term_FreeFor _ _ _ <| henkinTerm_vars ..
+lemma henkinTerm_gvars {m n : Nat} (h0 : m < n) (hm : (dc L m).isSome) (hn : (dc L n).isSome) :
+    let x := (dc L m).get hm; (Formula.henkinTerm p n hn).vars ∩
+    ((insert x.1 x.2.vars) ∪ (Formula.henkinTerm p m hm).vars) = ∅ := by
+  unfold Formula.henkinTerm
+  let m' := dc L m
+  let n' := dc L n
+  cases hm' : m' with
+  | none => simp only [m', hm', Option.isSome_none, Bool.false_eq_true] at hm
+  | some a => cases hn' : n' with
+    | none => simp only [n', hn', Option.isSome_none, Bool.false_eq_true] at hn
+    | some b =>
+      unfold m' at hm'
+      unfold n' at hn'
+      simp only [hm', Option.get_some, Set.inter_union_distrib_left, Set.union_eq_empty]
+      have hm1 : Option.isSome <| Option.map (fun x ↦ Formula.fall x.1 x.2) (dc L m) := by
+        simp only [hm', Option.map_some, Option.isSome_some]
+      have hn1 : Option.isSome <| Option.map (fun x ↦ Formula.fall x.1 x.2) (dc L n) := by
+        simp only [hn', Option.map_some, Option.isSome_some]
+      split_ands
+      · have h := newTerm_gvars p forGet h0 hm1 hn1
+        conv at h => lhs; rhs; simp only [forGet, hm', Option.map, Option.get_some, Formula.vars]
+        exact h
+      · exact Set.inter_comm .. ▸ newTerm_disjoint p forGet h0 hm1 hn1
+
+def Formula.henkinForm (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor i t φ) : Formula L :=
+  (¬∀i# φ) → ¬(subst i t φ h)
+
+def Formula.henkinfy (n : Nat) (h : (dc L n).isSome) :
+    Formula L :=
+  let x := (dc L n).get h
+  Formula.henkinForm x.1 (henkinTerm p n h) x.2
+  <| Formula.term_FreeFor _ _ _ <| Formula.henkinTerm_vars ..
 
 def henkinAdd (Γ : Set (Formula L)) (n : Nat) : Set (Formula L) :=
-  match Encodable.decode n (α := Idx × Formula L) with
-  | .none => Γ
-  | .some ⟨i, φ⟩ => insert (Formula.henkinfy p i φ) Γ
+  if h : (dc L n).isSome then insert (Formula.henkinfy p n h) Γ else Γ
 
 lemma henkinAdd_monotone (n : Nat) (Δ : Set (Formula L)) : Δ ⊆ henkinAdd p Δ n := by
   cases h' : Encodable.decode (α := Idx × Formula L) n with
-  | none => simp only [henkinAdd, h', Set.Subset.refl]
+  | none => simp only [henkinAdd, h', Option.isSome_none, Bool.false_eq_true,
+    ↓reduceDIte, subset_refl]
   | some φ => simp only [henkinAdd, h']; exact Set.subset_insert _ Δ
 
-theorem henkinTerm_gvars {i j : Idx} {φ ψ : Formula L}
-    (h0 : Encodable.encode (j, ψ) < Encodable.encode (i, φ)) :
-    (Formula.henkinTerm p i φ).vars ∩ ψ.vars = ∅ := by
-  unfold Formula.henkinTerm
-  have h1 := newTerm_gvars p (fun x ↦ Prod.snd <$> Encodable.decode (α := Idx × Formula L) x) h0
-  simp only [Encodable.encodek, Option.map_eq_map, Option.map_some] at h1
-  dsimp only [Option.map_eq_map]
-  exact h1
-
-theorem henkinExpand_ord0 {Γ : Set (Formula L)} {φ ψ : Formula L} {i : Idx} {n : Nat}
-    (hg : ψ ∈ expand (henkinAdd p) ∅ n) (h0 : n = Encodable.encode (i, φ)) :
-    ∃ m : Nat, ∃ j : Idx, m < n ∧ m = Encodable.encode (j, ψ):= by
+theorem henkinExpand_ord {n : Nat} {g : Formula L} (hg : g ∈ expand (henkinAdd p) Γ n) :
+    g ∈ Γ ∨ ∃ m : Nat, ∃ hm : (dc L m).isSome, m < n ∧ Formula.henkinfy p m hm = g := by
   induction n with
-  | zero => unfold expand at hg; sorry
+  | zero => unfold expand at hg; left; exact hg
   | succ n hn =>
     dsimp [expand, henkinAdd] at hg
+    split_ifs at hg with h'
+    · rw [Set.mem_insert_iff] at hg
+      rcases hg with h1 | h2
+      · right; use n; use h'; refine ⟨Nat.lt_add_one n, ?_⟩
+        let n' := dc L n
+        cases hn' : n' with
+        | none => unfold n' at hn'; exfalso; rwa [hn', Option.isSome_none, Bool.false_eq_true] at h'
+        | some a => unfold n' at hn'; rw [h1]
+      · refine Or.elim (hn h2) Or.inl fun ⟨m, hm, h3, h4⟩ => ?_
+        right; use m; use hm; exact ⟨Nat.lt_trans h3 (Nat.lt_add_one n), h4⟩
+    · refine Or.elim (hn hg) Or.inl fun ⟨m, hm, h3, h4⟩ => ?_
+      right; use m; use hm; exact ⟨Nat.lt_trans h3 (Nat.lt_add_one n), h4⟩
 
-    sorry
-theorem henkinExpand_ord {Γ : Set (Formula L)} {φ ψ : Formula L} {i : Idx}
-    (hg : ψ ∈ expand (henkinAdd p) ∅ (Encodable.encode (i, φ))) :
-    ∃ j : Idx, Encodable.encode (j, ψ) < Encodable.encode (i, φ) := by
-  induction hi : Encodable.encode (i, φ) /-generalizing i ψ φ-/ with
-  | zero => sorry
-  | succ n hn =>
-    rw [hi] at hg
-    dsimp [expand, henkinAdd] at hg
-    match hj : Encodable.decode (α := Idx × Formula L) n with
-    | none =>
-      simp only [hj] at hg
-      unfold expand at hg
-      cases n with
-      | zero => sorry
-      | succ m => dsimp [henkinAdd] at hg; sorry
-    | some (j, χ) =>
-
-      sorry
-
-theorem henkinExpand_vars {φ g : Formula L} {i : Idx}
-    (hg : g ∈ expand (henkinAdd p) ∅ (Encodable.encode (i, φ)).succ) :
-    (Formula.henkinTerm p i φ).vars ∩ g.vars = ∅ := by
-  /-have h : Prod.snd <$> Encodable.decode (α := Idx × Formula L) ((Encodable.encode (i, φ)))
-      = φ := by simp only [Encodable.encode_prod_val', Encodable.encode_nat,
-    Encodable.decode_prod_val', Nat.unpair_pair', Encodable.decode_nat,
-    Encodable.encodek, Option.map_some, Option.bind_some, Option.map_eq_map]-/
-  cases hi : Encodable.encode (i, φ) with
-  | zero =>
-    simp only [expand, henkinAdd, Encodable.encodek, Set.mem_insert_iff] at hg
-    rw [hi] at hg
-    unfold expand at hg
-    rcases hg with hg | hg
-    · subst hg
-      unfold Formula.henkinTerm
-      sorry
-    · sorry
-  | succ n =>
-    simp only [expand, henkinAdd, Encodable.encodek, Set.mem_insert_iff] at hg
-
-    sorry
+theorem henkinExpand_vars {n : Nat} {g : Formula L} (hn : (dc L n).isSome)
+    (hg : g ∈ expand (henkinAdd p) Γ n) :
+    g ∈ Γ ∨ (Formula.henkinTerm p n hn).vars ∩ g.vars = ∅ := by
+  refine Or.elim (henkinExpand_ord Γ p hg) Or.inl fun ⟨m, hm, h1, h2⟩ => ?_
+  right; rw [←h2]; unfold Formula.henkinfy
+  let m' := dc L m
+  cases h' : m' with
+  | none => simp only [m', h', Option.isSome_none, Bool.false_eq_true] at hm
+  | some x =>
+    unfold m' at h'
+    simp only [h', Option.get_some, Formula.henkinForm, Formula.vars, Formula.not,
+      Set.union_empty, ←Set.disjoint_iff_inter_eq_empty]
+    have h3 := Formula.henkinTerm_vars p m hm
+    simp only [h', Option.get_some] at h3
+    have h4 := Formula.subst_vars (i := x.1) (t := Formula.henkinTerm p m hm) (φ := x.2) <|
+      Formula.term_FreeFor _ _ _ h3
+    apply Set.disjoint_of_subset_right <| Set.union_subset_union_right _ h4
+    conv =>
+      arg 2
+      conv => arg 2; rw [Set.union_comm]
+      rw [←Set.union_assoc, Set.insert_union', Set.union_self]
+    rw [Set.disjoint_iff_inter_eq_empty]
+    have h5 := henkinTerm_gvars p h1 hm hn
+    simpa only [h', Option.get_some] using h5
 
 private abbrev henkinExpand := completeExpand (henkinAdd p (L := L) ·)
 
 set_option linter.unusedDecidableInType false in
-theorem Henkinbaum [hd : DecidablePred (InCon (L := L))] : Con Γ -> Con (henkinExpand p Γ) := by
+theorem Henkinbaum [hd : DecidablePred (InCon (L := L))] (hg : ∀ g ∈ Γ, g.vars ∩ p = ∅) :
+    Con Γ -> Con (henkinExpand p Γ) := by
   intro h'; by_contra h
   unfold henkinExpand completeExpand Inconsistent at h
   replace h := maximalSet_compact (henkinAdd_monotone p) ⊥ h
@@ -376,23 +433,32 @@ theorem Henkinbaum [hd : DecidablePred (InCon (L := L))] : Con Γ -> Con (henkin
       simp only [henkinAdd, hn] at h1
       exact h2 n (Nat.lt_succ_self n) h1
     | .some ⟨i, φ⟩ =>
-      simp only [henkinAdd, hn, insert, Proof.deduction] at h1
-      unfold Formula.henkinfy Formula.henkin at h1
+      simp only [henkinAdd, hn, insert, Option.isSome_some, ↓reduceDIte, Proof.deduction] at h1
+      unfold Formula.henkinfy Formula.henkinForm at h1
       have h3 := Proof.mp (Proof.neg_of_impl_left _ _) h1
       have h4 := Proof.mp (Proof.neg_of_impl_right _ _) h1
       replace h4 := Proof.mp (FOL.AX _ (.h3 _)) h4
       unfold Formula.henkinTerm newTerm at h4
       apply h2 n <| Nat.lt_succ_self n
       apply Proof.mp h3
+      simp only [dc, hn, Option.get_some] at h4 ⊢
       refine Proof.mp (Proof.monotone (Set.empty_union _ ▸ Set.subset_union_right)
         (Proof.all_impl_subst i _ ?_)) <| Proof.gen_rule _ _ _ ?_ h4
       · intro h5
-        have h6 := Formula.henkinTerm_vars p i φ
+        have h6 := Formula.henkinTerm_vars (L := L) p n <| by
+          simp only [dc, hn, Option.isSome_some]
         unfold Formula.henkinTerm newTerm Term.vars at h6
-        rw [Set.singleton_inter_eq_empty] at h6
+        simp only [dc, hn, Option.get_some, Set.singleton_inter_eq_empty] at h6
         exact h6 h5
       · intro ψ h5 h6
-        sorry
+        replace h6 := Formula.fvar_subset_vars ψ h6
+        have h7 := hn ▸ Option.isSome_some
+        rcases henkinExpand_vars Γ p h7 h5 with h0 | h0
+        · have h8 := hg ψ h0
+          exact Set.notMem_empty _ <| h8 ▸ Set.mem_inter h6 (Subtype.prop _)
+        · unfold Formula.henkinTerm newTerm Term.vars at h0
+          rw [Set.singleton_inter_eq_empty] at h0
+          exact h0 h6
 
 end Henkin
 end PrimaryLogic
