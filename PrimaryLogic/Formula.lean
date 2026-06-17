@@ -23,18 +23,11 @@ inductive Term (L : Lang LF LP) : Type
   | var (i : Idx)
   | app (n : LF) (args : Fin (L.funcs n) -> Term L)
 
-/- The `must` constructor is originally designed for modal logic,
-    while it is temporarily unnecessary for this project,
-    which rarely involves theories outside FOL.
-  It might be reintroduced one day I found that it would be safe enough to do so,
-    meaning having minimal impact on other theorem.
-  Before that day, I prioritize the constuction of the sound and complete FOL theory. -/
 inductive Formula (L : Lang LF LP) : Type
   | atom (n : LP) (args : Fin (L.preds n) -> Term L)
   | falsum
   | impl : Formula L -> Formula L -> Formula L
   | fall : Idx -> Formula L -> Formula L
---  | must : Formula L -> Formula L
 
 instance : Inhabited (Term L) := ⟨.var 0⟩
 instance : Inhabited (Formula L) := ⟨.falsum⟩
@@ -283,4 +276,36 @@ theorem Formula.substFun_depth_eq [DecidableEq LF] (f : LF) (t : Term L) (φ : F
 
 end depth
 
+section Mor
+structure VarContext (L : Lang LF LP) (p : Idx → Prop) where
+  i : Idx := 0
+  t : Term L := .var i
+  φ : Formula L := .falsum
+  ψ : Formula L := .falsum
+  hi : p i
+  ht : t.vars ⊆ p
+  hx : φ.vars ⊆ p
+  hy : ψ.vars ⊆ p
+
+structure Mor (L : Lang LF LP) where
+  d : Idx
+  p : Idx -> Prop
+  ι : Idx -> Idx
+  τ : Term L -> Term L
+  f : Formula L -> Formula L
+  pd : p d
+  inj_ι : PartInj p ι
+
+open Formula Set in
+structure MorAx (m : Mor L) (c : VarContext L m.p) : Prop where
+  map_τvars : (m.τ c.t).vars = m.ι '' c.t.vars
+  map_fvars : (m.f c.φ).vars = m.ι '' c.φ.vars
+  map_falsum : m.f falsum = falsum
+  map_impl : m.f (impl c.φ c.ψ) = impl (m.f c.φ) (m.f c.ψ)
+  map_fall : m.f (fall c.i c.φ) = fall (m.ι c.i) (m.f c.φ)
+  free_var : c.i ∉ c.φ.fvar → (m.ι c.i) ∉ (m.f c.φ).fvar
+  free_for : FreeFor c.i c.t c.φ → FreeFor (m.ι c.i) (m.τ c.t) (m.f c.φ)
+  map_subst (h) :
+    m.f (subst c.i c.t c.φ h) = subst (m.ι c.i) (m.τ c.t) (m.f c.φ) (free_for h)
+end Mor
 end PrimaryLogic

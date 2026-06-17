@@ -83,7 +83,7 @@ lemma contrapositive (x y : Formula L) : Γ ⊢ (¬x → ¬y) → (y → x) :=
   have p9 := (deduction (Γ.insert ((x → ⊥) → (y → ⊥))) y x).mp p8
   (deduction Γ ((x → ⊥) → (y → ⊥)) (y → x)).mp p9
 
-lemma neg_of_impl (x y : Formula L) : Γ ⊢ ¬(x → y) → x :=
+lemma neg_of_impl_left (x y : Formula L) : Γ ⊢ ¬(x → y) → x :=
   have p1 := AS (φ := ¬x) (Set.mem_insert _ Γ)
   have p2 := neg_impl (y := y) p1
   have p3 := intro_double_neg (Γ := insert (¬x) Γ) (x → y)
@@ -91,6 +91,15 @@ lemma neg_of_impl (x y : Formula L) : Γ ⊢ ¬(x → y) → x :=
   have p5 := (deduction ..).mp p4
   have p6 := contrapositive (Γ := Γ) x (¬(x → y))
   mp p6 p5
+
+lemma neg_of_impl_right (x y : Formula L) : Γ ⊢ ¬(x → y) → ¬y :=
+  let Δ := insert y <| insert (¬(x → y)) Γ
+  have p1 := AX Δ <| .h1 y x
+  have p2 := AS <| Set.mem_insert y (insert (¬(x → y)) Γ)
+  have p3 := mp p1 p2
+  have p4 := AS <| Set.mem_insert_of_mem y (Set.mem_insert (¬(x → y)) Γ)
+  have p5 := mp p4 p3
+  by simpa only [insert, deduction] using p5
 
 lemma raa (x : Formula L) : (Γ ⊢ x) <-> Inconsistent (Γ.insert (¬x) ∪ FOLTheory) := by
   unfold Inconsistent
@@ -160,6 +169,20 @@ lemma impl_all_intro (i : Idx) {φ ψ : Formula L} (p : {φ} ⊢ ψ) : {∀i#φ}
   have p3 := AX ∅ <| .q1 i φ ψ
   have p4 := mp p3 p2
   by rw [Set.singleton_def]; dsimp [insert]; rw [deduction]; exact p4
+
+lemma all_impl_subst (i j : Idx) {φ : Formula L} (hj : j ∉ φ.vars) :
+    ∅ ⊢ (∀j#(Formula.subst i (.var j) φ (Formula.var_var_FreeFor i j φ hj))) → ∀i#φ := by
+  have h1 := Formula.var_var_FreeFor i j φ hj
+  have ⟨h2, h3⟩ := Formula.subst_circulation i j φ hj
+  have p1 := AX ∅ <| .q2 j (.var i) (Formula.subst i (.var j) φ h1) h2
+  unfold FOLAxioms.toFormula at p1
+  rw [h3, ←deduction] at p1
+  have p2 := gen_rule _ φ i (fun g h0 => Or.elim h0 (fun h h4 =>
+    have ⟨h5, h6⟩ := Set.mem_diff_singleton.mp (by rwa [h] at h4)
+    Or.elim ((Formula.subst_fvar i (.var j) φ h1) h5) h6
+      fun h' => ((Set.mem_diff_singleton).mp h').2 rfl)
+    fun h _ => Set.notMem_empty g h) p1
+  exact (deduction ..).mp p2
 
 end quantifier
 
