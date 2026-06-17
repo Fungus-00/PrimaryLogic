@@ -160,42 +160,6 @@ theorem forallInFin_eq (n : Nat) (p : Fin n → Bool) :
 
 end forall_in
 
-abbrev Idx := Nat -- Planed to be replaced with type argument.
-
-section assignment
-
-abbrev Assignment (α : Type*) := Idx -> α
-
-variable {α : Type u} (s : Assignment α)
-
-abbrev replace (i : Idx) (a : α) :=
-  fun k => if k = i then a else s k
-
-lemma replace_absorb (i : Idx) : replace s i (s i) = s :=
-  funext fun k => by unfold replace; split_ifs with h; try rw [h]; rfl
-
-lemma replace_comm (i j : Idx) (h : i ≠ j) (a b : α) :
-    replace (replace s i a) j b = replace (replace s j b) i a := by
-  funext k; unfold replace
-  split_ifs with h1 h2
-  · rw [←h1, ←h2] at h; contradiction
-  repeat rfl
-
-lemma replace_idempotent (i : Idx) (a b : α) :
-    replace (replace s i a) i b = replace s i b := by
-  funext k; unfold replace; split_ifs with h1 <;> rfl
-
-lemma replace_of_map (f : Idx -> Idx) (hf : Function.Injective f) (i : Idx) (a : α) :
-    replace (s ∘ f) i a = replace s (f i) a ∘ f := by
-  unfold replace; funext k; dsimp
-  split_ifs with h1 h2
-  · rfl
-  · exfalso; exact h2 <| congrArg f h1
-  · rename_i h2; exfalso; exact h1 (hf h2)
-  · rfl
-
-end assignment
-
 section list_ceq
 variable {α : Type*}
 
@@ -252,6 +216,19 @@ instance : Freshable Nat where
       have h1 := ht.2 m <| (h m).mp hs.1
       have h2 := hs.2 n <| (h n).mpr ht.1
       exact h1.antisymm h2
+
+@[reducible]
+def Freshable.ofEquiv {α β : Type*} {g : β → α} {f : α → β} (v : Function.LeftInverse g f)
+    [u : Freshable α] : Freshable β where
+  fresh s := f <| u.fresh <| List.map g s
+  fresh_is_new s h := u.fresh_is_new _ <| v _ ▸ List.mem_map_of_mem (f := g) h
+  fresh_ceq_invariance s t h := congrArg f <| u.fresh_ceq_invariance _ _ <| fun x => by
+    simp only [List.mem_map]
+    unfold List.ceq at h
+    constructor
+    · rintro ⟨b, h1, h2⟩; use b ;exact ⟨(h b).mp h1, h2⟩
+    · rintro ⟨a, h1, h2⟩; use a ;exact ⟨(h a).mpr h1, h2⟩
+
 end freshable
 
 section pfun
@@ -545,7 +522,44 @@ theorem _root_.List.canonize_invariance {l : List α} {a : α} (hl : a ∈ l) (h
   dsimp [s] at h6 ⊢
   ext; dsimp; symm
   rwa [List.getElem_unattach] at h6
-
 end pass
 end List
+
+abbrev Idx := Nat -- Planed to be replaced with type argument.
+
+section assignment
+
+abbrev Assignment (α : Type*) := Idx -> α
+
+variable {α : Type u} (s : Assignment α)
+
+abbrev replace (i : Idx) (a : α) :=
+  fun k => if k = i then a else s k
+
+lemma replace_absorb (i : Idx) : replace s i (s i) = s :=
+  funext fun k => by unfold replace; split_ifs with h; try rw [h]; rfl
+
+lemma replace_comm (i j : Idx) (h : i ≠ j) (a b : α) :
+    replace (replace s i a) j b = replace (replace s j b) i a := by
+  funext k; unfold replace
+  split_ifs with h1 h2
+  · rw [←h1, ←h2] at h; contradiction
+  repeat rfl
+
+lemma replace_idempotent (i : Idx) (a b : α) :
+    replace (replace s i a) i b = replace s i b := by
+  funext k; unfold replace; split_ifs with h1 <;> rfl
+
+lemma replace_of_map' {p} {f : Idx -> Idx} (hf : PartInj p f) {i j : Idx}
+    (hi : p i) (hj : p j) (a : α) :
+    (replace (s ∘ f) i a) j = (replace s (f i) a ∘ f) j := by
+  unfold replace; dsimp only [Function.comp_apply]
+  split_ifs with h1 h2
+  · rfl
+  · exfalso; exact h2 <| congrArg f h1
+  · rename_i h2; exfalso; exact h1 <| hf hj hi h2
+  · rfl
+
+end assignment
+
 end PrimaryLogic

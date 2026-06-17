@@ -73,11 +73,6 @@ theorem Term.interpret_termModel (t : Term L) : interpret (TermModel Δ) .var t 
     conv => lhs; arg 0; dsimp only [TermModel]
     congr; funext k; exact h k
 
-class Henkin (Δ : Set (Formula L)) (θ : Idx -> Formula L -> Term L) : Prop where
-  mc : MaximalConsistent Δ
-  pt : ∀ i : Idx, ∀ φ : Formula L, Formula.FreeFor i (θ i φ) φ
-  ax : ∀ i : Idx, ∀ φ : Formula L, Formula.henkinForm i (θ i φ) φ (pt i φ) ∈ Δ
-
 instance {α : Type*} (s : Set α) [inst : DecidablePred s] : DecidablePred (· ∈ s) := inst
 
 variable {θ : Idx -> Formula L -> Term L}

@@ -80,6 +80,7 @@ lemma Term.interpret_replace_invariance {t : Term L} (s : Assignment α) (a : α
   rw [h] at hj
   exfalso
   exact hi hj
+
 theorem Formula.interpret_coincidence {φ : Formula L} (s t : Assignment α) :
     (∀ i ∈ φ.fvar, s i = t i) -> (φ.interpret M s <-> φ.interpret M t) := by
   intro h
@@ -118,7 +119,7 @@ theorem Formula.interpret_replace_invariance
 
 /-- Classical needed -/
 theorem Structure.sentence_determinacy [Inhabited α] (φ : Formula L) : φ.fvar = ∅ ->
-    (∀ s : Assignment α, φ.interpret M s) ∨ (∀ s : Assignment α, ¬ φ.interpret M s) := by
+    (∀ s : Assignment α, φ.interpret M s) ∨ (∀ s : Assignment α, ¬φ.interpret M s) := by
   intro h0
   let s0 : Assignment α := fun _ => Inhabited.default (α := α)
   have := Formula.interpret_coincidence M (φ := φ) s0
@@ -200,61 +201,42 @@ theorem Formula.interpret_subst (s) {i t φ} (h : FreeFor i t φ) :
         conv =>
           lhs; intro a; arg 2; arg 3;
           rw [Term.interpret_replace_invariance M s a h3.left]
+
 lemma Term.interpret_varMap (f : Idx -> Idx) (s) (t) :
     interpret M s (varMap f t) = interpret M (s ∘ f) t := by
   induction t with
   | var i => unfold varMap interpret; rfl
   | app n a h => unfold varMap interpret; congr; funext k; apply h
 
-lemma Formula.interpret_varMap {f : Idx -> Idx} (hf : Function.Injective f) (s) (φ) :
-    interpret M s (varMap f φ) ↔ interpret M (s ∘ f) φ := by
+lemma Formula.interpret_varMap {p : Set Idx} {f : Idx → Idx} (hf : PartInj p f) (s) {φ}
+    (hi : φ.vars ⊆ p) : interpret M s (varMap f φ) ↔ interpret M (s ∘ f) φ := by
   induction φ generalizing s with
   | atom n a => unfold varMap interpret; conv => lhs; arg 3; intro i; rw [Term.interpret_varMap]
   | falsum => rfl
-  | impl x y hx hy => unfold varMap interpret; rw [hx s, hy s]
+  | impl x y hx hy =>
+    unfold vars at hi; rw [Set.union_subset_iff] at hi
+    unfold varMap interpret; rw [hx s hi.1, hy s hi.2]
   | fall i ψ h' =>
     unfold varMap interpret
     suffices h : ∀ (a : α), interpret M (replace s (f i) a) (varMap f ψ)
         ↔ interpret M (replace (s ∘ f) i a) ψ from
       ⟨fun x a => (h a).mp (x a), fun x a => (h a).mpr (x a)⟩
     intro a
-    rw [replace_of_map s f hf]
-    apply h'
-/-
-lemma Formula.interpret_varMapl {f : Idx -> Idx} (s) (φ) :
-    interpret M (s ∘ f) φ -> interpret M s (varMap f φ) := by
-  intro h
-  induction φ generalizing s with
-  | atom n a =>
-    unfold varMap interpret; unfold interpret at h
-    conv at h => arg 3; intro i; rw [←Term.interpret_varMap]
-    exact h
-  | falsum => unfold varMap interpret; exact h
-  | impl x y hx hy =>
-    unfold varMap interpret; unfold interpret at h
-    intro h'
--/
-lemma Structure.satisfies_varMap_inj {f : Idx -> Idx} (hf : Function.Injective f)
-    (M : Structure L α) (Γ : Set (Formula L)) (φ : Formula L) :
+    unfold vars at hi; rw [Set.insert_subset_iff] at hi
+    have h (j : Idx) (hj : j ∈ ψ.fvar) :=
+      replace_of_map' s hf hi.1 (hi.2 <| Formula.fvar_subset_vars _ hj) a
+    replace h := Formula.interpret_coincidence M _ _ h
+    rw [h]
+    exact h' _ hi.2
+
+theorem Structure.satisfies_varMap_inj {p : Set Idx} {f : Idx → Idx} (hf : PartInj p f)
+    (M : Structure L α) {Γ φ} (hΓ : ∀ g ∈ Γ, g.vars ⊆ p) (hφ : φ.vars ⊆ p) :
     M.satisfies Γ φ -> M.satisfies ((Formula.varMap f) '' Γ) (Formula.varMap f φ) := by
   intro h s ψ
-  rw [Formula.interpret_varMap M hf]
+  rw [Formula.interpret_varMap M hf _ hφ]
   apply h
   intro χ h'
-  rw [←Formula.interpret_varMap M hf]
+  rw [←Formula.interpret_varMap M hf _ (hΓ χ h')]
   exact ψ _ (Set.mem_image_of_mem _ h')
-
-lemma Structure.satisfies_varMap_linv {f : Idx -> Idx} (hf : Function.HasLeftInverse f)
-    (M : Structure L α) (Γ : Set (Formula L)) (φ : Formula L) :
-    M.satisfies ((Formula.varMap f) '' Γ) (Formula.varMap f φ) -> M.satisfies Γ φ := by
-  intro h s ψ
-  obtain ⟨g, hg⟩ := hf
-  rw [←Function.comp_id s, ←hg.id, ←Function.comp_assoc, ←Formula.interpret_varMap M hg.injective]
-  have := h (s ∘ g) (by sorry)
-  apply h
-  intro χ h'
-  --rw [←Formula.interpret_varMap M]
-  sorry
 end interpret
-
 end PrimaryLogic

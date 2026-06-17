@@ -330,6 +330,10 @@ lemma Formula.henkinTerm_vars (n : Nat) (h : (dc L n).isSome) :
   rw [Set.insert_eq, Set.inter_union_distrib_left, Set.union_eq_empty] at hb
   exact hb.2
 
+lemma Formula.henkinTerm_FreeFor (n : Nat) (h : (dc L n).isSome) :
+    let x := (dc L n).get h; FreeFor x.1 (henkinTerm p n h) x.2 :=
+  term_FreeFor _ _ _ <| henkinTerm_vars ..
+
 lemma henkinTerm_gvars {m n : Nat} (h0 : m < n) (hm : (dc L m).isSome) (hn : (dc L n).isSome) :
     let x := (dc L m).get hm; (Formula.henkinTerm p n hn).vars ∩
     ((insert x.1 x.2.vars) ∪ (Formula.henkinTerm p m hm).vars) = ∅ := by
@@ -360,8 +364,7 @@ def Formula.henkinForm (i : Idx) (t : Term L) (φ : Formula L) (h : FreeFor i t 
 def Formula.henkinfy (n : Nat) (h : (dc L n).isSome) :
     Formula L :=
   let x := (dc L n).get h
-  Formula.henkinForm x.1 (henkinTerm p n h) x.2
-  <| Formula.term_FreeFor _ _ _ <| Formula.henkinTerm_vars ..
+  Formula.henkinForm x.1 (henkinTerm p n h) x.2 <| henkinTerm_FreeFor ..
 
 def henkinAdd (Γ : Set (Formula L)) (n : Nat) : Set (Formula L) :=
   if h : (dc L n).isSome then insert (Formula.henkinfy p n h) Γ else Γ
@@ -405,8 +408,7 @@ theorem henkinExpand_vars {n : Nat} {g : Formula L} (hn : (dc L n).isSome)
       Set.union_empty, ←Set.disjoint_iff_inter_eq_empty]
     have h3 := Formula.henkinTerm_vars p m hm
     simp only [h', Option.get_some] at h3
-    have h4 := Formula.subst_vars (i := x.1) (t := Formula.henkinTerm p m hm) (φ := x.2) <|
-      Formula.term_FreeFor _ _ _ h3
+    have h4 := Formula.subst_vars (i := x.1) <| Formula.term_FreeFor _ _ _ h3
     apply Set.disjoint_of_subset_right <| Set.union_subset_union_right _ h4
     conv =>
       arg 2
@@ -460,5 +462,41 @@ theorem Henkinbaum [hd : DecidablePred (InCon (L := L))] (hg : ∀ g ∈ Γ, g.v
           rw [Set.singleton_inter_eq_empty] at h0
           exact h0 h6
 
+class Henkin (Δ : Set (Formula L)) (θ : Idx -> Formula L -> Term L) : Prop where
+  mc : MaximalConsistent Δ
+  pt : ∀ i : Idx, ∀ φ : Formula L, Formula.FreeFor i (θ i φ) φ
+  ax : ∀ i : Idx, ∀ φ : Formula L, Formula.henkinForm i (θ i φ) φ (pt i φ) ∈ Δ
+
+private def Formula.pt' (i : Idx) (φ : Formula L) : Term L :=
+  Formula.henkinTerm p (Encodable.encode (i, φ)) <| by
+    unfold dc; rw [Encodable.encodek (i, φ)]; exact Option.isSome_some
+
+@[reducible]
+def HenkinInstance [hd : DecidablePred (InCon (L := L))] {Γ : Set (Formula L)}
+    (hc : Con Γ) (hg : ∀ g ∈ Γ, g.vars ∩ p = ∅) :
+    Henkin (maxExpand <| henkinExpand p Γ) (Formula.pt' p) where
+  mc := Lindenbaum _ <| Henkinbaum Γ p hg hc
+  pt i φ := Formula.term_FreeFor _ _ _ <| by
+    have h' := Formula.henkinTerm_vars p (Encodable.encode (i, φ)) <| by
+      unfold dc; rw [Encodable.encodek (i, φ)]; exact Option.isSome_some
+    unfold Formula.pt'
+    unfold dc at h'
+    simpa only [Encodable.encodek (i, φ), Option.get_some] using h'
+  ax i φ := by
+    unfold maxExpand completeExpand
+    rw [Set.mem_iUnion]
+    use 0
+    unfold expand henkinExpand completeExpand
+    rw [Set.mem_iUnion]
+    use Encodable.encode (i, φ) + 1
+    unfold expand henkinAdd dc
+    simp only [Encodable.encodek (i, φ), Option.isSome_some, ↓reduceDIte, Set.mem_insert_iff]
+    left
+    unfold Formula.henkinfy
+    simp only [Formula.pt', dc, Encodable.encodek (i, φ), Option.get_some]
 end Henkin
+
+section inst
+
+end inst
 end PrimaryLogic
