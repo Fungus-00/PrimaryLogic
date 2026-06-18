@@ -1,6 +1,4 @@
 import PrimaryLogic.NoAC
-import Mathlib.Data.Finset.Basic
-import Mathlib.Data.Finset.Sort
 import Mathlib.Data.List.Dedup
 
 namespace PrimaryLogic
@@ -218,7 +216,7 @@ instance : Freshable Nat where
       exact h1.antisymm h2
 
 @[reducible]
-def Freshable.ofEquiv {α β : Type*} {g : β → α} {f : α → β} (v : Function.LeftInverse g f)
+def Freshable.ofLeftInverse {α β : Type*} {g : β → α} {f : α → β} (v : Function.LeftInverse g f)
     [u : Freshable α] : Freshable β where
   fresh s := f <| u.fresh <| List.map g s
   fresh_is_new s h := u.fresh_is_new _ <| v _ ▸ List.mem_map_of_mem (f := g) h
@@ -562,4 +560,25 @@ lemma replace_of_map' {p} {f : Idx -> Idx} (hf : PartInj p f) {i j : Idx}
 
 end assignment
 
+section even_odd
+def Nat.toEven : Nat → {n : Nat // Even n} := fun n => ⟨2 * n, n, Nat.two_mul n⟩
+def Nat.toOdd : Nat → {n : Nat // Odd n} := fun n => ⟨2 * n + 1, n, rfl⟩
+def Nat.ofEven : {n : Nat // Even n} → Nat := fun ⟨n, _⟩ => n.div2
+def Nat.ofOdd : {n : Nat // Odd n} → Nat := fun ⟨n, _⟩ => n.div2
+
+theorem Nat.toEven_ofEven_LeftInverse : Function.LeftInverse Nat.ofEven Nat.toEven :=
+  Nat.div2_bit0
+
+theorem Nat.toOdd_ofOdd_LeftInverse : Function.LeftInverse Nat.ofOdd Nat.toOdd :=
+  Nat.div2_bit1
+
+instance : Freshable {n : Nat // Even n} := Freshable.ofLeftInverse Nat.toEven_ofEven_LeftInverse
+instance : Freshable {n : Nat // Odd n} := Freshable.ofLeftInverse Nat.toOdd_ofOdd_LeftInverse
+
+theorem Nat.div2_PartInj : PartInj Even Nat.div2 := fun {x y} hx hy h => by
+  have v := congrArg (· * 2) h
+  dsimp [Nat.div2] at v
+  rwa [Nat.div_two_mul_two_of_even hx, Nat.div_two_mul_two_of_even hy] at v
+
+end even_odd
 end PrimaryLogic

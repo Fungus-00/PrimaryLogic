@@ -194,6 +194,13 @@ def ProofTree.map {p} [DecidablePred p] [fr : Freshable (Subtype p)] {f : Idx �
       fun _ h => List.mem_cons_of_mem d (compress_varList_eq t ▸ h)
   monotone (Set.image_mono' <| assumptions_subset t) r
 
+theorem Proof.Con_map {f : Idx → Idx} (hv : Function.HasLeftInverse f) {Γ : Set (Formula L)} :
+    Con Γ -> Con ((Formula.varMap f) '' Γ) := by
+  unfold Con Consistent Inconsistent
+  intro h h0
+
+  sorry
+
 def ffresh {α : Type*} [fr : Freshable α] (ρ : Nat → Option (List α)) : Nat → List α
   | .zero => []
   | .succ n => match ρ n with
@@ -495,8 +502,4 @@ def HenkinInstance [hd : DecidablePred (InCon (L := L))] {Γ : Set (Formula L)}
     unfold Formula.henkinfy
     simp only [Formula.pt', dc, Encodable.encodek (i, φ), Option.get_some]
 end Henkin
-
-section inst
-
-end inst
 end PrimaryLogic

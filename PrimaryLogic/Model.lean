@@ -29,7 +29,8 @@ abbrev Structure.modelsOf (M : Structure L α) (Γ : Set (Formula L)) := ∀ g :
 @[simp]
 theorem Structure.models_reduce (M : Structure L α) (φ : Formula L) :
     M.models φ <-> ∀ s : Assignment α, φ.interpret M s := by
-  unfold models; unfold Structure.satisfies; simp [Set.mem_empty_iff_false]
+  unfold models Structure.satisfies
+  simp only [Set.mem_empty_iff_false, IsEmpty.forall_iff, implies_true, forall_const]
 
 def SemanticConsequence (Γ : Set (Formula L)) (φ : Formula L) : Prop :=
   ∀ (α : Type) (M : Structure L α), M.satisfies Γ φ
@@ -46,6 +47,9 @@ prefix:21 "⊨ " => Formula.valid
 def Satisfiable (Γ : Set (Formula L)) : Prop :=
   ∃ (α : Type) (M : Structure L α) (s : Assignment α),
   ∀ g ∈ Γ, g.interpret M s
+
+lemma Satisfiable.monotone {Γ Δ : Set (Formula L)} : Γ ⊆ Δ → Satisfiable Δ → Satisfiable Γ :=
+  fun h0 ⟨α, M, s, h1⟩ => ⟨α, M, s, fun φ h2 => h1 φ (h0 h2)⟩
 
 def Mod (Γ : Set (Formula L)) (α : Type*) := { M : Structure L α // M.modelsOf Γ }
 
@@ -168,7 +172,7 @@ lemma Term.interpret_subst (s) {i ti t} :
   | var j =>
     simp only [interpret, subst]
     by_cases h : i = j
-    · simp [h]
+    · simp only [h, ↓reduceIte, left_eq_ite_iff, not_true_eq_false, IsEmpty.forall_iff]
     · simp only [h, interpret, ↓reduceIte, right_eq_ite_iff]; intro h'
       exfalso; exact h h'.symm
   | app n args h =>
@@ -208,7 +212,7 @@ lemma Term.interpret_varMap (f : Idx -> Idx) (s) (t) :
   | var i => unfold varMap interpret; rfl
   | app n a h => unfold varMap interpret; congr; funext k; apply h
 
-lemma Formula.interpret_varMap {p : Set Idx} {f : Idx → Idx} (hf : PartInj p f) (s) {φ}
+theorem Formula.interpret_varMap {p : Set Idx} {f : Idx → Idx} (hf : PartInj p f) (s) {φ}
     (hi : φ.vars ⊆ p) : interpret M s (varMap f φ) ↔ interpret M (s ∘ f) φ := by
   induction φ generalizing s with
   | atom n a => unfold varMap interpret; conv => lhs; arg 3; intro i; rw [Term.interpret_varMap]
