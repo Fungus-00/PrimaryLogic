@@ -43,11 +43,9 @@ theorem Term.interpret_termModel (t : Term L) : interpret (TermModel Δ) .var t 
     conv => lhs; arg 0; dsimp only [TermModel]
     congr; funext k; exact h k
 
-instance {α : Type*} (s : Set α) [inst : DecidablePred s] : DecidablePred (· ∈ s) := inst
-
 variable {θ : Idx -> Formula L -> Term L}
-set_option linter.unusedDecidableInType false in
-theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula L) :
+
+theorem Formula.truth_lemma [hk : Henkin Δ θ] (φ : Formula L) :
     interpret (TermModel Δ) .var φ ↔ φ ∈ Δ := by
   induction hd : φ.depth using Nat.strongRec generalizing φ with
   | ind d h => cases φ with
@@ -70,7 +68,7 @@ theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula
       maxConSet_iff Δ y hk.mc, maxConSet_iff Δ (x → y) hk.mc]
     constructor
     · intro p
-      by_cases h : x ∈ Δ
+      rcases lem (x ∈ Δ) with h | h
       · have p' := FOL.AX Δ (.h1 y x)
         exact .mp p' (p h)
       · have p1 := (hk.mc.right x).resolve_left h
@@ -93,7 +91,7 @@ theorem Formula.truth_lemma [DecidablePred Δ] [hk : Henkin Δ θ] (φ : Formula
       have p := hk.ax i ψ
       rw [m] at p
       unfold henkinForm at p
-      by_contra
+      apply dne; by_contra
       have h6 : (¬∀i# ψ) ∈ Δ := by
         rcases hk.mc.right (fall i ψ) with hl | hr
         · exfalso; exact this hl
@@ -162,7 +160,31 @@ lemma complete_iff_satisfiable :
 
 variable [Encodable LF] [Encodable LP]
 
+private lemma Nat.mul2_HasLeftInverse : Function.HasLeftInverse (· * 2) :=
+  ⟨(· / 2), fun n => Nat.mul_div_cancel n (by decide)⟩
 
+private instance : DecidablePred (Set.range (· * 2)) := by
+  simp only [Set.range, Nat.mul_two, Eq.comm]
+  exact Encodable.instDecidablePredNatEven'
+
+theorem completeness : ∀ Γ : Set (Formula L), ∀ φ : Formula L, (Γ ⊨ φ) -> (Γ ⊢ φ) :=
+  complete_iff_satisfiable.mp
+  <| fun Γ hc => Satisfiable_expand
+  <| Structure.satisfiable_map (f := (· * 2))
+  (Function.HasLeftInverse.injective Nat.mul2_HasLeftInverse) Γ <|
+  let Δ := (Formula.varMap (· * 2) '' Γ)
+  let Λ := maxExpand <| henkinExpand Odd Δ
+  ⟨Term L, TermModel Λ, .var, fun g hg =>
+  have hd : ∀ g ∈ Δ, g.vars ∩ Odd = ∅ := fun _ ⟨_, _, h2⟩ => h2
+    ▸ Formula.varMap_vars ..
+    ▸ (Set.eq_empty_iff_forall_notMem.mpr fun _ ⟨⟨_, _, h4⟩, _, h5⟩ =>
+      False.elim
+      <| Nat.even_odd_disjoint
+      <| h4.symm ▸ Nat.mul_comm .. ▸ h5)
+  have hk := HenkinInstance (Γ := Δ) Odd (Proof.Con_map Nat.mul2_HasLeftInverse hc) hd
+  have ha : g ∈ Λ := Set.mem_of_subset_of_mem subset_completeExpand
+    <| Set.mem_of_subset_of_mem subset_completeExpand hg
+  (Formula.truth_lemma (hk := hk) g).mpr ha⟩
 
 end completeness
 end PrimaryLogic

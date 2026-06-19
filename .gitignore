@@ -1,1 +1,4 @@
 /.lake
+./PrimaryLogic/AD.lean
+./PrimaryLogic/Redundancy.lean
+./repomix-output.xml

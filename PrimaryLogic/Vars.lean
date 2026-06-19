@@ -435,19 +435,24 @@ section map
 abbrev Term.av (t : Term L) (p : Idx → Prop) : Prop := ∀ i ∈ t.vars, p i
 abbrev Formula.av (φ : Formula L) (p : Idx → Prop) : Prop := ∀ i ∈ φ.vars, p i
 
-variable (p : Idx -> Prop) (f : Idx -> Idx)
-def Term.varMap : Term L -> Term L
+def Term.varMap (f : Idx -> Idx) : Term L -> Term L
   | var i => .var (f i)
-  | app n s => .app n fun k => varMap (s k)
+  | app n s => .app n fun k => varMap f (s k)
 
-def Formula.varMap (φ : Formula L) : Formula L :=
+def Formula.varMap (f : Idx -> Idx) (φ : Formula L) : Formula L :=
   match φ with
   | atom n s => atom n fun k => Term.varMap f (s k)
   | falsum => falsum
-  | impl ψ χ => impl (varMap ψ) (varMap χ)
-  | fall i ψ => fall (f i) <| varMap ψ
+  | impl ψ χ => impl (varMap f ψ) (varMap f χ)
+  | fall i ψ => fall (f i) <| varMap f ψ
 
 variable {p : Idx -> Prop} {f : Idx -> Idx}
+
+lemma Term.varMap_id : varMap (L := L) id = id := by
+  ext t
+  induction t with
+  | var i => rfl
+  | app n s h => dsimp [varMap]; congr; funext k; exact h k
 
 lemma Term.varMap_comp {g : Idx → Idx} :
     varMap (L := L) (f ∘ g) = (varMap f) ∘ (varMap g) := by
@@ -455,15 +460,6 @@ lemma Term.varMap_comp {g : Idx → Idx} :
   induction t with
   | var i => rfl
   | app n s h => dsimp [varMap]; congr; funext k; exact h k
-
-theorem Formula.varMap_comp {g : Idx → Idx} :
-    varMap (L := L) (f ∘ g) = (varMap f) ∘ (varMap g) := by
-  ext φ
-  induction φ with
-  | atom n s => dsimp [varMap]; congr; funext k; rw [Term.varMap_comp]; rfl
-  | falsum => rfl
-  | impl x y hx hy => simp only [varMap, hx, Function.comp_apply, hy]
-  | fall i x h => simp only [varMap, Function.comp_apply, h]
 
 lemma Term.varMap_vars (t : Term L) :
     (varMap f t).vars = t.vars.image f := by
@@ -474,6 +470,52 @@ lemma Term.varMap_vars (t : Term L) :
     rw [Set.image_iUnion]
     dsimp
     conv => lhs; arg 1; intro k; rw [h k]
+
+lemma Term.varMap_subst (hf : PartInj p f) (i : Idx) (t s : Term L)
+    (pi : p i) (ht : t.av p) :
+    (s.subst i t).varMap f = (s.varMap f).subst (f i) (t.varMap f) := by
+  induction t with
+  | var j =>
+    conv => rhs; arg 3; unfold varMap
+    conv => lhs; unfold subst
+    split_ifs with h
+    · conv => rhs; rw [h]
+      simp only [subst, ↓reduceIte]
+    · have := hf.ne pi (ht j (Set.mem_singleton ..)) h
+      simp only [subst, this, ↓reduceIte]
+      unfold varMap
+      rfl
+  | app n args h =>
+    open Set in
+    simp only [av, vars, Set.mem_iUnion, forall_exists_index] at ht
+    simp only [subst, varMap]
+    congr; funext k
+    apply h k fun j hj => ht j k hj
+
+lemma Term.varMap_eq {f g : Idx → Idx} {t : Term L} (h : ∀ i ∈ t.vars, f i = g i) :
+    t.varMap f = t.varMap g := by
+  induction t with
+  | var i => unfold varMap; congr; exact h i (Set.mem_singleton _)
+  | app n s h' =>
+    unfold varMap; congr; funext k
+    exact h' k fun j hj => h j <| Set.mem_iUnion_of_mem k hj
+
+lemma Formula.varMap_id : varMap (L := L) id = id := by
+  ext φ
+  induction φ with
+  | atom n s => dsimp [varMap]; congr; funext k; rw [Term.varMap_id]; rfl
+  | falsum => rfl
+  | impl x y hx hy => simp only [varMap, hx, id, hy]
+  | fall i x h => simp only [varMap, id, h]
+
+lemma Formula.varMap_comp {g : Idx → Idx} :
+    varMap (L := L) (f ∘ g) = (varMap f) ∘ (varMap g) := by
+  ext φ
+  induction φ with
+  | atom n s => dsimp [varMap]; congr; funext k; rw [Term.varMap_comp]; rfl
+  | falsum => rfl
+  | impl x y hx hy => simp only [varMap, hx, Function.comp_apply, hy]
+  | fall i x h => simp only [varMap, Function.comp_apply, h]
 
 lemma Formula.varMap_vars (φ : Formula L) :
     (varMap f φ).vars = φ.vars.image f := by
@@ -526,27 +568,6 @@ lemma Formula.varMap_fvar {φ : Formula L} (hf : PartInj p f) (hi : φ.vars ⊆ 
       rw [Set.mem_singleton_iff] at hx
       rw [hx]
       exact hi i (Set.mem_insert ..)
-
-lemma Term.varMap_subst (hf : PartInj p f) (i : Idx) (t s : Term L)
-    (pi : p i) (ht : t.av p) :
-    (s.subst i t).varMap f = (s.varMap f).subst (f i) (t.varMap f) := by
-  induction t with
-  | var j =>
-    conv => rhs; arg 3; unfold varMap
-    conv => lhs; unfold subst
-    split_ifs with h
-    · conv => rhs; rw [h]
-      simp only [subst, ↓reduceIte]
-    · have := hf.ne pi (ht j (Set.mem_singleton ..)) h
-      simp only [subst, this, ↓reduceIte]
-      unfold varMap
-      rfl
-  | app n args h =>
-    open Set in
-    simp only [av, vars, Set.mem_iUnion, forall_exists_index] at ht
-    simp only [subst, varMap]
-    congr; funext k
-    apply h k fun j hj => ht j k hj
 
 lemma Formula.varMap_FreeFor (hf : PartInj p f) {i : Idx} {t : Term L} {φ : Formula L}
     (pi : p i) (hi : φ.av p) (ht : t.av p) :
@@ -610,14 +631,6 @@ theorem Formula.varMap_subst (hf : PartInj p f) {i : Idx} {t : Term L} {φ : For
       unfold FreeFor at h
       simp only [h1, false_or] at h
       exact h' _ hi.right
-
-theorem Term.varMap_eq {f g : Idx → Idx} {t : Term L} (h : ∀ i ∈ t.vars, f i = g i) :
-    t.varMap f = t.varMap g := by
-  induction t with
-  | var i => unfold varMap; congr; exact h i (Set.mem_singleton _)
-  | app n s h' =>
-    unfold varMap; congr; funext k
-    exact h' k fun j hj => h j <| Set.mem_iUnion_of_mem k hj
 
 theorem Formula.varMap_eq {f g : Idx → Idx} {φ : Formula L} (h : ∀ i ∈ φ.vars, f i = g i) :
     φ.varMap f = φ.varMap g := by

@@ -226,7 +226,7 @@ theorem Formula.interpret_varMap {p : Set Idx} {f : Idx → Idx} (hf : PartInj p
         ↔ interpret M (replace (s ∘ f) i a) ψ from
       ⟨fun x a => (h a).mp (x a), fun x a => (h a).mpr (x a)⟩
     intro a
-    unfold vars at hi; rw [Set.insert_subset_iff] at hi
+    unfold vars at hi; rw [Set.insert_subset_iff'] at hi
     have h (j : Idx) (hj : j ∈ ψ.fvar) :=
       replace_of_map' s hf hi.1 (hi.2 <| Formula.fvar_subset_vars _ hj) a
     replace h := Formula.interpret_coincidence M _ _ h
@@ -242,5 +242,12 @@ theorem Structure.satisfies_varMap_inj {p : Set Idx} {f : Idx → Idx} (hf : Par
   intro χ h'
   rw [←Formula.interpret_varMap M hf _ (hΓ χ h')]
   exact ψ _ (Set.mem_image_of_mem _ h')
+
+theorem Structure.satisfiable_map {f : Idx → Idx} (hv : Function.Injective f)
+    (Γ : Set (Formula L)) : Satisfiable ((Formula.varMap f) '' Γ) ->
+    Satisfiable Γ := fun ⟨α, M, s, hg⟩ =>
+  ⟨α, M, s ∘ f, fun φ h => (@Formula.interpret_varMap _ _ L α M Set.univ f
+    (PartInj.univ hv) s φ (Set.subset_univ _)).mp
+    <| hg (Formula.varMap f φ) (Set.mem_image_of_mem _ h)⟩
 end interpret
 end PrimaryLogic

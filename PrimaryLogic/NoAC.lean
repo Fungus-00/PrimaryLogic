@@ -140,6 +140,10 @@ theorem image_empty' (f : α → β) : f '' ∅ = ∅ := by
   ext x; constructor <;>
   simp only [Set.mem_empty_iff_false, Set.mem_image, false_and, exists_false, imp_self]
 
+theorem image_univ' {f : α → β} : f '' univ = range f := by
+  unfold univ range; ext x
+  simp only [setOf_true, mem_image, mem_univ, true_and, mem_setOf_eq]
+
 theorem image_singleton' {f : α → β} {a : α} : f '' {a} = {f a} := by
   ext x; constructor <;> rw [Set.mem_singleton_iff, Set.mem_image] <;>
   simp only [Set.mem_singleton_iff, exists_eq_left] <;> intro h <;> symm <;> exact h
@@ -172,6 +176,12 @@ theorem image_insert_eq' {f : α → β} {a : α} :
 lemma image_mono' {f : α → β} (h : s ⊆ t) : f '' s ⊆ f '' t := by
   simp only [subset_def, mem_image, forall_exists_index, and_imp, forall_apply_eq_imp_iff₂]
   rw [subset_def] at h; intro a hs; use a; exact ⟨h a hs, rfl⟩
+
+theorem image_subset_range' (f : α → β) (s) : f '' s ⊆ range f := by
+  rw [← image_univ']; exact image_mono' (subset_univ _)
+
+theorem mem_range_of_mem_image' (f : α → β) (s) {x : β} (h : x ∈ f '' s) : x ∈ range f :=
+  image_subset_range' f s h
 
 end Set
 
@@ -283,6 +293,13 @@ lemma bodd_add_div2' : ∀ n, (bodd n).toNat + 2 * div2 n = n
     · simp only [Bool.not_true, Bool.toNat_false, succ_eq_add_one,
         cond_true, zero_add, Bool.toNat_true]
       omega
+
+lemma odd_iff' {n} : Odd n ↔ n % 2 = 1 :=
+  ⟨fun ⟨m, hm⟩ ↦ by omega, fun h ↦ ⟨n / 2, by omega⟩⟩
+
+lemma even_iff' {n} : Even n ↔ n % 2 = 0 where
+  mp := fun ⟨m, hm⟩ ↦ by simp [← Nat.two_mul, hm]
+  mpr h := ⟨n / 2, by omega⟩
 
 private def IsSqrt (n q : ℕ) : Prop :=
   q * q ≤ n ∧ n < (q + 1) * (q + 1)
@@ -483,4 +500,10 @@ instance finPi' (n) (π : Fin n → Type*) [∀ i, Encodable (π i)] : Encodable
 
 instance Bool.encodable' : Encodable Bool :=
   ofEquiv (Unit ⊕ Unit) Equiv.boolEquivPUnitSumPUnit
+
+instance instDecidablePredNatOdd' : DecidablePred (Odd : ℕ → Prop) :=
+  fun _ ↦ decidable_of_iff _ Nat.odd_iff'.symm
+
+instance instDecidablePredNatEven' : DecidablePred (Even : ℕ → Prop) :=
+  fun _ ↦ decidable_of_iff _ Nat.even_iff'.symm
 end Encodable
